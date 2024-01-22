@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 
-use eframe::glow::COLOR;
-use egui::{emath, epaint::TextShape, pos2, Color32, Pos2, Rect, Rounding, Sense, Vec2};
-use palette::{rgb::Rgb, FromColor, Hsv};
+use egui::{emath, pos2, Color32, Rect, Rounding, Sense, Vec2};
 use tes3::esp::{Landscape, Plugin};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
-    #[serde(skip)]
     paint_all: bool,
+
     #[serde(skip)]
     heights_map: HashMap<(i32, i32), [[f32; 65]; 65]>,
     #[serde(skip)]
@@ -140,10 +138,10 @@ impl TemplateApp {
 
     fn generate_shapes(&mut self, to_screen: emath::RectTransform) {
         //for cy in (self.min_y..self.max_y + 1).rev() {
-        for cy in (self.min_y..self.max_y + 1) {
+        for cy in self.min_y..self.max_y + 1 {
             for cx in self.min_x..self.max_x + 1 {
-                let tx = cx;
-                let ty = cy;
+                let tx = cx - self.min_x;
+                let ty = self.max_y - cy;
 
                 if let Some(heights) = self.heights_map.get(&(cx, cy)) {
                     // look up heightmap
@@ -152,7 +150,7 @@ impl TemplateApp {
                             let color = get_color_for_height(*value);
                             // map to screen space
                             let x_f32 = (VERTEX_CNT as i32 * tx) as f32 + x as f32;
-                            let y_f32 = (VERTEX_CNT as i32 * ty) as f32 + y as f32;
+                            let y_f32 = (VERTEX_CNT as i32 * ty) as f32 + (VERTEX_CNT - y) as f32;
                             let min = to_screen * pos2(x_f32, y_f32);
                             let max = to_screen * pos2(x_f32 + ZOOM, y_f32 + ZOOM);
                             let rect = Rect::from_min_max(min, max);
@@ -172,6 +170,27 @@ impl TemplateApp {
 
                     let shape = egui::Shape::rect_filled(rect, Rounding::default(), Color32::BLACK);
                     self.shapes.push(shape);
+                }
+            }
+        }
+    }
+
+    fn paint_cell(&mut self, to_screen: emath::RectTransform) {
+        if let Some(landscape) = &self.current_landscape {
+            if let Some(heights) = self.heights_map.get(&(landscape.grid.0, landscape.grid.1)) {
+                for (y, row) in heights.iter().enumerate() {
+                    for (x, value) in row.iter().enumerate() {
+                        let color = get_color_for_height(*value);
+                        // map to screen space
+                        let x_f32 = x as f32;
+                        let y_f32 = (VERTEX_CNT - y) as f32;
+                        let min = to_screen * pos2(x_f32, y_f32);
+                        let max = to_screen * pos2(x_f32 + ZOOM, y_f32 + ZOOM);
+                        let rect = Rect::from_min_max(min, max);
+
+                        let shape = egui::Shape::rect_filled(rect, Rounding::default(), color);
+                        self.shapes.push(shape);
+                    }
                 }
             }
         }
@@ -281,22 +300,19 @@ impl eframe::App for TemplateApp {
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::hover());
 
             let from = if self.paint_all {
+                let nx = self.max_x - self.min_x;
+                let ny = self.max_y - self.min_y;
+
                 Rect::from_min_max(
-                    pos2(
-                        VERTEX_CNT as f32 * self.min_x as f32,
-                        VERTEX_CNT as f32 * self.min_y as f32,
-                    ),
-                    pos2(
-                        VERTEX_CNT as f32 * self.max_x as f32,
-                        VERTEX_CNT as f32 * self.max_y as f32,
-                    ),
+                    pos2(0.0, 0.0),
+                    pos2(VERTEX_CNT as f32 * nx as f32, VERTEX_CNT as f32 * ny as f32),
                 )
             } else {
                 Rect::from_min_max(pos2(0.0, 0.0), pos2(VERTEX_CNT as f32, VERTEX_CNT as f32))
             };
 
             let to_screen = emath::RectTransform::from_to(from, response.rect);
-            let from_screen = to_screen.inverse();
+            //let from_screen = to_screen.inverse();
 
             // paint
             if self.paint_all {
@@ -305,27 +321,7 @@ impl eframe::App for TemplateApp {
                 }
             } else if self.shapes.is_empty() {
                 // cell vertex heights
-                if let Some(landscape) = &self.current_landscape {
-                    if let Some(heights) =
-                        self.heights_map.get(&(landscape.grid.0, landscape.grid.1))
-                    {
-                        for (y, row) in heights.iter().enumerate() {
-                            for (x, value) in row.iter().enumerate() {
-                                let color = get_color_for_height(*value);
-                                // map to screen space
-                                let x_f32 = x as f32;
-                                let y_f32 = (VERTEX_CNT - y) as f32;
-                                let min = to_screen * pos2(x_f32, y_f32);
-                                let max = to_screen * pos2(x_f32 + ZOOM, y_f32 + ZOOM);
-                                let rect = Rect::from_min_max(min, max);
-
-                                let shape =
-                                    egui::Shape::rect_filled(rect, Rounding::default(), color);
-                                self.shapes.push(shape);
-                            }
-                        }
-                    }
-                }
+                self.paint_cell(to_screen);
             }
 
             painter.extend(self.shapes.clone());
@@ -335,29 +331,6 @@ impl eframe::App for TemplateApp {
 
 const ZOOM: f32 = 1.0;
 const VERTEX_CNT: usize = 65;
-
-fn map_height_to_color(height: f32) -> Color32 {
-    // Assuming height ranges from 0 to 2000
-    let normalized_height = height / 2000.0;
-
-    // Map normalized height to hue in the range [0.0, 240.0]
-    let hue = normalized_height * 240.0;
-
-    // Set saturation and value to create a nice gradient
-    let saturation = 1.0;
-    let value = 0.8;
-
-    // Create an HSV color
-    //let color = Hsv::new(hue, saturation, value);
-
-    let hsv_u8 = Hsv::new_srgb(hue, saturation, value);
-    //let hsv_f32 = hsv_u8.into_format::<f32>();
-
-    // Convert HSV to RGB
-    let rgb = Rgb::from_color(hsv_u8);
-
-    Color32::from_rgb(rgb.red as u8, rgb.green as u8, rgb.blue as u8)
-}
 
 fn get_color_for_height(value: f32) -> Color32 {
     if value < 0.0 {
