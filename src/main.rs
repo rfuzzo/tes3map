@@ -18,7 +18,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "eframe template",
+        "tes3 map",
         native_options,
         Box::new(|cc| Box::new(tes3map::TemplateApp::new(cc))),
     )
