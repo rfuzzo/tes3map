@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use egui::{emath, pos2, Color32, Rect, Rounding, Sense, Vec2};
+use egui::{pos2, Color32, ColorImage, Rect, Sense};
 use tes3::esp::{Landscape, Plugin};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -15,7 +15,7 @@ pub struct TemplateApp {
     landscape_records: HashMap<(i32, i32), Landscape>,
 
     #[serde(skip)]
-    shapes: Vec<egui::Shape>,
+    texture: Option<egui::TextureHandle>,
     #[serde(skip)]
     info: String,
     #[serde(skip)]
@@ -136,8 +136,12 @@ impl TemplateApp {
         }
     }
 
-    fn generate_shapes(&mut self, to_screen: emath::RectTransform) {
-        //for cy in (self.min_y..self.max_y + 1).rev() {
+    fn generate_image(&mut self) -> ColorImage {
+        // dimensions
+        let nx = (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32);
+        let ny = (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32);
+        let mut pixel: Vec<f32> = vec![-1.0; nx as usize * ny as usize];
+
         for cy in self.min_y..self.max_y + 1 {
             for cx in self.min_x..self.max_x + 1 {
                 let tx = cx - self.min_x;
@@ -147,54 +151,58 @@ impl TemplateApp {
                     // look up heightmap
                     for (y, row) in heights.iter().enumerate() {
                         for (x, value) in row.iter().enumerate() {
-                            let color = get_color_for_height(*value);
-                            // map to screen space
-                            let x_f32 = (VERTEX_CNT as i32 * tx) as f32 + x as f32;
-                            let y_f32 = (VERTEX_CNT as i32 * ty) as f32 + (VERTEX_CNT - y) as f32;
-                            let min = to_screen * pos2(x_f32, y_f32);
-                            let max = to_screen * pos2(x_f32 + ZOOM, y_f32 + ZOOM);
-                            let rect = Rect::from_min_max(min, max);
+                            let x_f32 = (VERTEX_CNT as i32 * tx) + x as i32;
+                            let y_f32 = (VERTEX_CNT as i32 * ty) + (VERTEX_CNT as i32 - y as i32);
 
-                            let shape = egui::Shape::rect_filled(rect, Rounding::default(), color);
-                            self.shapes.push(shape);
+                            let i = (y_f32 * nx) + x_f32;
+                            pixel[i as usize] = *value;
                         }
                     }
                 } else {
-                    // print empty rect
-                    let x = (VERTEX_CNT as i32 * tx) as f32;
-                    let y = (VERTEX_CNT as i32 * ty) as f32;
+                    for y in 0..VERTEX_CNT {
+                        for x in 0..VERTEX_CNT {
+                            let x_f32 = (VERTEX_CNT as i32 * tx) + x as i32;
+                            let y_f32 = (VERTEX_CNT as i32 * ty) + y as i32;
 
-                    let min = pos2(x, y);
-                    let max = min + Vec2::new(VERTEX_CNT as f32, VERTEX_CNT as f32);
-                    let rect = Rect::from_min_max(to_screen * min, to_screen * max);
-
-                    let shape = egui::Shape::rect_filled(rect, Rounding::default(), Color32::BLACK);
-                    self.shapes.push(shape);
-                }
-            }
-        }
-    }
-
-    fn paint_cell(&mut self, to_screen: emath::RectTransform) {
-        if let Some(landscape) = &self.current_landscape {
-            if let Some(heights) = self.heights_map.get(&(landscape.grid.0, landscape.grid.1)) {
-                for (y, row) in heights.iter().enumerate() {
-                    for (x, value) in row.iter().enumerate() {
-                        let color = get_color_for_height(*value);
-                        // map to screen space
-                        let x_f32 = x as f32;
-                        let y_f32 = (VERTEX_CNT - y) as f32;
-                        let min = to_screen * pos2(x_f32, y_f32);
-                        let max = to_screen * pos2(x_f32 + ZOOM, y_f32 + ZOOM);
-                        let rect = Rect::from_min_max(min, max);
-
-                        let shape = egui::Shape::rect_filled(rect, Rounding::default(), color);
-                        self.shapes.push(shape);
+                            let i = (y_f32 * nx) + x_f32;
+                            pixel[i as usize] = -1.0;
+                        }
                     }
                 }
             }
         }
+
+        let size = [nx as usize, ny as usize];
+        let mut img = ColorImage::new(size, Color32::BLUE);
+        let p = pixel
+            .iter()
+            .map(|f| get_color_for_height(*f))
+            .collect::<Vec<_>>();
+        img.pixels = p;
+
+        img
     }
+
+    // fn paint_cell(&mut self, to_screen: emath::RectTransform) {
+    //     if let Some(landscape) = &self.current_landscape {
+    //         if let Some(heights) = self.heights_map.get(&(landscape.grid.0, landscape.grid.1)) {
+    //             for (y, row) in heights.iter().enumerate() {
+    //                 for (x, value) in row.iter().enumerate() {
+    //                     let color = get_color_for_height(*value);
+    //                     // map to screen space
+    //                     let x_f32 = x as f32;
+    //                     let y_f32 = (VERTEX_CNT - y) as f32;
+    //                     let min = to_screen * pos2(x_f32, y_f32);
+    //                     let max = to_screen * pos2(x_f32 + ZOOM, y_f32 + ZOOM);
+    //                     let rect = Rect::from_min_max(min, max);
+
+    //                     let shape = egui::Shape::rect_filled(rect, Rounding::default(), color);
+    //                     //self.shapes.push(shape);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 impl eframe::App for TemplateApp {
@@ -205,14 +213,9 @@ impl eframe::App for TemplateApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Put your widgets into a `SidePanel`, `TopBottomPanel`, `CentralPanel`, `Window` or `Area`.
-        // For inspiration and more examples, go to https://emilk.github.io/egui
-
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
-
             egui::menu::bar(ui, |ui| {
-                // NOTE: no File->Quit on web pages!
                 ui.menu_button("File", |ui| {
                     if ui.button("Load").clicked() {
                         let file_option = rfd::FileDialog::new()
@@ -224,7 +227,7 @@ impl eframe::App for TemplateApp {
                             let mut plugin = Plugin::new();
 
                             // clear
-                            self.shapes.clear();
+                            self.texture = None;
                             self.landscape_records.clear();
                             self.min_x = 0;
                             self.max_x = 0;
@@ -272,7 +275,7 @@ impl eframe::App for TemplateApp {
                                     if let Some(v) = self.landscape_records.get(&(x, y)) {
                                         if ui.button(format!("({x},{y})")).clicked() {
                                             // store
-                                            self.shapes.clear();
+                                            self.texture = None;
                                             self.current_landscape = Some(v.clone());
                                         }
                                     }
@@ -295,41 +298,50 @@ impl eframe::App for TemplateApp {
                 return;
             }
 
-            // cell vertex heights
             let (response, painter) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::hover());
 
-            let from = if self.paint_all {
-                let nx = self.max_x - self.min_x;
-                let ny = self.max_y - self.min_y;
+            let _from = if self.paint_all {
+                let nx = (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32);
+                let ny = (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32);
 
-                Rect::from_min_max(
-                    pos2(0.0, 0.0),
-                    pos2(VERTEX_CNT as f32 * nx as f32, VERTEX_CNT as f32 * ny as f32),
-                )
+                egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(nx as f32, ny as f32))
             } else {
-                Rect::from_min_max(pos2(0.0, 0.0), pos2(VERTEX_CNT as f32, VERTEX_CNT as f32))
+                egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(VERTEX_CNT as f32, VERTEX_CNT as f32))
             };
 
-            let to_screen = emath::RectTransform::from_to(from, response.rect);
+            //let to_screen = egui::emath::RectTransform::from_to(from, response.rect);
             //let from_screen = to_screen.inverse();
 
             // paint
             if self.paint_all {
-                if self.shapes.is_empty() {
-                    self.generate_shapes(to_screen);
+                if self.texture.is_none() {
+                    let img = self.generate_image();
+                    let _texture: &egui::TextureHandle = self.texture.get_or_insert_with(|| {
+                        // Load the texture only once.
+                        ui.ctx().load_texture("my-image", img, Default::default())
+                    });
                 }
-            } else if self.shapes.is_empty() {
-                // cell vertex heights
-                self.paint_cell(to_screen);
             }
+            // else if self.pixel.is_empty() {
+            //     // cell vertex heights
+            //     self.paint_cell(to_screen);
+            // }
 
-            painter.extend(self.shapes.clone());
+            //painter.extend(self.shapes.clone());
+            if let Some(texture) = &self.texture {
+                painter.image(
+                    texture.into(),
+                    response.rect,
+                    Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                    Color32::WHITE,
+                )
+            }
         });
     }
 }
 
-const ZOOM: f32 = 1.0;
+//const ZOOM: f32 = 1.0;
 const VERTEX_CNT: usize = 65;
 
 fn get_color_for_height(value: f32) -> Color32 {
