@@ -1,13 +1,20 @@
 use std::collections::HashMap;
 
 use egui::{pos2, Color32, ColorImage, Rect, Sense};
+use palette::convert::FromColorUnclamped;
+use palette::{Hsv, IntoColor, LinSrgb};
 use tes3::esp::{Landscape, Plugin};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(serde::Deserialize, serde::Serialize, Default)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
     paint_all: bool,
+
+    depth_spectrum: usize,
+    depth_base: Color32,
+    height_spectrum: usize,
+    height_base: Color32,
 
     #[serde(skip)]
     heights_map: HashMap<(i32, i32), [[f32; 65]; 65]>,
@@ -29,6 +36,34 @@ pub struct TemplateApp {
     max_x: i32,
     #[serde(skip)]
     max_y: i32,
+
+    #[serde(skip)]
+    min_z: f32,
+    #[serde(skip)]
+    max_z: f32,
+}
+
+impl Default for TemplateApp {
+    fn default() -> Self {
+        Self {
+            paint_all: Default::default(),
+            depth_spectrum: 20,
+            depth_base: Color32::BLUE,
+            height_spectrum: 120,
+            height_base: Color32::DARK_GREEN,
+            heights_map: Default::default(),
+            landscape_records: Default::default(),
+            texture: Default::default(),
+            info: Default::default(),
+            current_landscape: Default::default(),
+            min_x: Default::default(),
+            min_y: Default::default(),
+            max_x: Default::default(),
+            max_y: Default::default(),
+            min_z: Default::default(),
+            max_z: Default::default(),
+        }
+    }
 }
 
 impl TemplateApp {
@@ -47,10 +82,20 @@ impl TemplateApp {
     }
 
     fn load_data(&mut self, plugin: Plugin) {
+        // clear
+        self.texture = None;
+        self.landscape_records.clear();
+        self.min_x = 0;
+        self.max_x = 0;
+        self.min_y = 0;
+        self.max_y = 0;
+
         let mut min_x: Option<i32> = None;
         let mut min_y: Option<i32> = None;
         let mut max_x: Option<i32> = None;
         let mut max_y: Option<i32> = None;
+        let mut min_z: Option<f32> = None;
+        let mut max_z: Option<f32> = None;
 
         for record in plugin.into_objects_of_type::<Landscape>() {
             // get grid dimensions
@@ -65,19 +110,19 @@ impl TemplateApp {
             } else {
                 min_x = Some(x);
             }
-            if let Some(miny) = min_y {
-                if y < miny {
-                    min_y = Some(y);
-                }
-            } else {
-                min_y = Some(y);
-            }
             if let Some(maxx) = max_x {
                 if x > maxx {
                     max_x = Some(x);
                 }
             } else {
                 max_x = Some(x);
+            }
+            if let Some(miny) = min_y {
+                if y < miny {
+                    min_y = Some(y);
+                }
+            } else {
+                min_y = Some(y);
             }
             if let Some(maxy) = max_y {
                 if y > maxy {
@@ -126,6 +171,22 @@ impl TemplateApp {
                         for row in &mut heights {
                             for height in row {
                                 *height *= 8.0;
+
+                                let z = height.clone();
+                                if let Some(minz) = min_z {
+                                    if z < minz {
+                                        min_z = Some(z);
+                                    }
+                                } else {
+                                    min_z = Some(z);
+                                }
+                                if let Some(maxz) = max_z {
+                                    if z > maxz {
+                                        max_z = Some(z);
+                                    }
+                                } else {
+                                    max_z = Some(z);
+                                }
                             }
                         }
 
@@ -134,6 +195,9 @@ impl TemplateApp {
                 }
             }
         }
+
+        self.min_z = min_z.unwrap();
+        self.max_z = max_z.unwrap();
     }
 
     fn generate_image(&mut self) -> ColorImage {
@@ -176,7 +240,7 @@ impl TemplateApp {
         let mut img = ColorImage::new(size, Color32::BLUE);
         let p = pixel
             .iter()
-            .map(|f| get_color_for_height(*f))
+            .map(|f| self.get_color_for_height(*f))
             .collect::<Vec<_>>();
         img.pixels = p;
 
@@ -195,7 +259,6 @@ impl TemplateApp {
     //                     let min = to_screen * pos2(x_f32, y_f32);
     //                     let max = to_screen * pos2(x_f32 + ZOOM, y_f32 + ZOOM);
     //                     let rect = Rect::from_min_max(min, max);
-
     //                     let shape = egui::Shape::rect_filled(rect, Rounding::default(), color);
     //                     //self.shapes.push(shape);
     //                 }
@@ -203,6 +266,78 @@ impl TemplateApp {
     //         }
     //     }
     // }
+
+    fn get_color_for_height(&mut self, value: f32) -> Color32 {
+        if value < 0.0 {
+            self.depth_to_color(value)
+        } else {
+            self.height_to_color(value)
+        }
+    }
+
+    fn height_to_color(&mut self, height: f32) -> Color32 {
+        let b: LinSrgb<u8> = LinSrgb::from_components((
+            self.height_base.r(),
+            self.height_base.g(),
+            self.height_base.b(),
+        ));
+        let base = Hsv::from_color_unclamped(b.into_format::<f32>());
+
+        // Normalize the height to the range [0.0, 1.0]
+        let normalized_height = height / self.max_z;
+
+        // Map normalized height to hue in the range [120.0, 30.0] (green to brown)
+        // let hue = 120.0 - normalized_height * self.height_spectrum as f32;
+        // let saturation = 1.0;
+        // let value = 0.65;
+
+        let hue = base.hue - normalized_height * self.height_spectrum as f32;
+        let saturation = base.saturation;
+        let value = 0.65;
+        //base.value;
+
+        // Create an HSV color
+        let color = Hsv::new(hue, saturation, value);
+
+        // Convert HSV to linear RGB
+        let linear_rgb: LinSrgb = color.into_color();
+
+        // Convert linear RGB to gamma-corrected RGB
+        let c: LinSrgb<u8> = linear_rgb.into_format();
+
+        Color32::from_rgb(c.red, c.green, c.blue)
+    }
+
+    fn depth_to_color(&mut self, depth: f32) -> Color32 {
+        let b: LinSrgb<u8> = LinSrgb::from_components((
+            self.depth_base.r(),
+            self.depth_base.g(),
+            self.depth_base.b(),
+        ));
+        let base = Hsv::from_color_unclamped(b.into_format::<f32>());
+
+        // Normalize the depth to the range [0.0, 1.0]
+        let normalized_depth = -depth / self.min_z;
+
+        // Map normalized depth to hue in the range [240.0, 180.0] (blue to light blue)
+        // let hue = 240.0 - normalized_depth * self.depth_spectrum as f32;
+        // let saturation = 1.0;
+        // let value = 0.8;
+
+        let hue = base.hue - normalized_depth * self.depth_spectrum as f32;
+        let saturation = base.saturation;
+        let value = base.value;
+
+        // Create an HSV color
+        let color = Hsv::new(hue, saturation, value);
+
+        // Convert HSV to linear RGB
+        let linear_rgb: LinSrgb = color.into_color();
+
+        // Convert linear RGB to gamma-corrected RGB
+        let c: LinSrgb<u8> = linear_rgb.into_format();
+        Color32::from_rgb(c.red, c.green, c.blue)
+    }
 }
 
 impl eframe::App for TemplateApp {
@@ -225,14 +360,6 @@ impl eframe::App for TemplateApp {
 
                         if let Some(path) = file_option {
                             let mut plugin = Plugin::new();
-
-                            // clear
-                            self.texture = None;
-                            self.landscape_records.clear();
-                            self.min_x = 0;
-                            self.max_x = 0;
-                            self.min_y = 0;
-                            self.max_y = 0;
 
                             if plugin.load_path(&path).is_ok() {
                                 self.load_data(plugin);
@@ -257,6 +384,7 @@ impl eframe::App for TemplateApp {
         egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
             ui.heading("Cells");
             ui.checkbox(&mut self.paint_all, "Paint whole map");
+
             ui.separator();
 
             egui::ScrollArea::vertical()
@@ -289,9 +417,18 @@ impl eframe::App for TemplateApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading(format!(
-                "Map (Max y: {}, Min y: {}, Max x: {}, Min x: {})",
-                self.max_y, self.min_y, self.max_x, self.min_x
+                "Map (y: [{},{}]; x: [{},{}]; z: [{},{}])",
+                self.min_y, self.max_y, self.min_x, self.max_x, self.min_z, self.max_z
             ));
+            ui.horizontal(|ui| {
+                ui.color_edit_button_srgba(&mut self.height_base);
+                ui.add(egui::Slider::new(&mut self.height_spectrum, 0..=360).text("Height offset"));
+                ui.color_edit_button_srgba(&mut self.depth_base);
+                ui.add(egui::Slider::new(&mut self.depth_spectrum, 0..=360).text("Depth offset"));
+                if ui.button("Reload").clicked() {
+                    self.texture = None;
+                }
+            });
             ui.separator();
 
             if self.heights_map.is_empty() {
@@ -341,14 +478,4 @@ impl eframe::App for TemplateApp {
     }
 }
 
-//const ZOOM: f32 = 1.0;
 const VERTEX_CNT: usize = 65;
-
-fn get_color_for_height(value: f32) -> Color32 {
-    if value < 0.0 {
-        Color32::BLUE
-    } else {
-        Color32::BROWN
-        //map_height_to_color(value)
-    }
-}
