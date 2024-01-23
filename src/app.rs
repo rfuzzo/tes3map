@@ -1,10 +1,12 @@
 use std::{collections::HashMap, env, path::PathBuf};
 
-use egui::{pos2, Color32, ColorImage, Pos2, Rect, Sense, Vec2};
+use egui::{pos2, Color32, ColorImage, Pos2, Rect, Sense};
+use env_logger::fmt::style::Color;
 use tes3::esp::{Landscape, Plugin};
 
 use crate::{
-    create_image, generate_pixels, get_plugins_sorted, Dimensions, UiData, ZoomData, VERTEX_CNT,
+    create_image, decode_heights, get_color_pixels, get_plugins_sorted, Dimensions, UiData,
+    ZoomData, VERTEX_CNT,
 };
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -22,9 +24,13 @@ pub struct TemplateApp {
     #[serde(skip)]
     dimensions: Dimensions,
     #[serde(skip)]
-    pixels: Vec<f32>,
+    heights: Vec<f32>,
     #[serde(skip)]
-    texture: Option<egui::TextureHandle>,
+    pixel_color: Vec<Color32>,
+    #[serde(skip)]
+    background: Option<egui::TextureHandle>,
+    #[serde(skip)]
+    foreground: Option<egui::TextureHandle>,
 
     // ui
     ui_data: UiData,
@@ -55,8 +61,12 @@ impl TemplateApp {
     }
 
     /// Assigns landscape_records, dimensions and pixels
-    fn load_data(&mut self, records: &HashMap<(i32, i32), Landscape>) -> Option<ColorImage> {
-        self.texture = None;
+    fn load_data(
+        &mut self,
+        records: &HashMap<(i32, i32), Landscape>,
+    ) -> Option<(ColorImage, ColorImage)> {
+        self.background = None;
+        self.foreground = None;
 
         // get dimensions
         let mut min_x: Option<i32> = None;
@@ -108,16 +118,17 @@ impl TemplateApp {
         let mut min_z: Option<f32> = None;
         let mut max_z: Option<f32> = None;
         let mut heights_map: HashMap<(i32, i32), [[f32; 65]; 65]> = HashMap::default();
+
         for cy in min_y..max_y + 1 {
             for cx in min_x..max_x + 1 {
-                //let mut heights_vec = vec![];
-
                 if let Some(landscape) = records.get(&(cx, cy)) {
                     // get vertex data
                     if let Some(vertex_heights) = &landscape.vertex_heights {
                         // get data
                         let data = vertex_heights.data.clone();
+
                         let mut heights: [[f32; 65]; 65] = [[0.0; VERTEX_CNT]; VERTEX_CNT];
+
                         for y in 0..VERTEX_CNT {
                             for x in 0..VERTEX_CNT {
                                 heights[y][x] = data[y][x] as f32;
@@ -174,15 +185,62 @@ impl TemplateApp {
             max_z,
         };
 
-        let pixels = generate_pixels(dimensions, heights_map);
+        let pixels = decode_heights(dimensions, heights_map);
+
         let img = create_image(&pixels, dimensions, self.ui_data);
 
         // assign data
         self.landscape_records = records.clone();
         self.dimensions = dimensions;
-        self.pixels = pixels;
+        self.heights = pixels;
 
-        Some(img)
+        self.color_pixels_reload();
+        let mut img2 = ColorImage::new(dimensions.size(), Color32::TRANSPARENT);
+        img2.pixels = self.pixel_color.clone();
+
+        Some((img, img2))
+    }
+
+    fn color_pixels_reload(&mut self) {
+        let mut color_map: HashMap<(i32, i32), [[Color32; 65]; 65]> = HashMap::default();
+        let d = self.dimensions;
+
+        for cy in d.min_y..d.max_y + 1 {
+            for cx in d.min_x..d.max_x + 1 {
+                if let Some(landscape) = self.landscape_records.get(&(cx, cy)) {
+                    // get vertex data
+                    if let Some(vertex_colors) = &landscape.vertex_colors {
+                        let data = vertex_colors.data.clone();
+                        let mut colors: [[Color32; 65]; 65] =
+                            [[Color32::BLACK; VERTEX_CNT]; VERTEX_CNT];
+                        for y in 0..VERTEX_CNT {
+                            for x in 0..VERTEX_CNT {
+                                let rgb = data[y][x];
+                                let r = rgb[0];
+                                let g = rgb[1];
+                                let b = rgb[2];
+                                //println!("{},{},{}", r, g, b);
+
+                                //let rgb = Color32::from_rgb(r, g, b);
+                                let rgb =
+                                    Color32::from_rgba_unmultiplied(r, g, b, self.ui_data.alpha);
+                                // let w = Color32::from_white_alpha(a)
+                                // let c = rgb.additive().to_opaque();
+                                // colors[y][x] = c;
+
+                                // colors[y][x] =
+                                //     Color32::from_rgba_unmultiplied(r, g, b, self.ui_data.alpha);
+                                colors[y][x] = rgb;
+                            }
+                        }
+
+                        color_map.insert((cx, cy), colors);
+                    }
+                }
+            }
+        }
+
+        self.pixel_color = get_color_pixels(d, color_map);
     }
 
     fn load_folder(&mut self, path: &PathBuf, ctx: &egui::Context) {
@@ -202,11 +260,14 @@ impl TemplateApp {
             }
         }
 
-        if let Some(img) = self.load_data(&records) {
-            let _texture: &egui::TextureHandle = self.texture.get_or_insert_with(|| {
-                // Load the texture only once.
-                ctx.load_texture("my-image", img, Default::default())
-            });
+        if let Some((back, fore)) = self.load_data(&records) {
+            let _: &egui::TextureHandle = self
+                .background
+                .get_or_insert_with(|| ctx.load_texture("background", back, Default::default()));
+
+            let _: &egui::TextureHandle = self
+                .foreground
+                .get_or_insert_with(|| ctx.load_texture("foreground", fore, Default::default()));
         }
     }
 
@@ -269,15 +330,15 @@ impl eframe::App for TemplateApp {
                                     let key = r.grid;
                                     records.insert(key, r);
                                 }
-                                if let Some(img) = self.load_data(&records) {
-                                    let _texture: &egui::TextureHandle =
-                                        self.texture.get_or_insert_with(|| {
-                                            // Load the texture only once.
-                                            ui.ctx().load_texture(
-                                                "my-image",
-                                                img,
-                                                Default::default(),
-                                            )
+                                if let Some((back, fore)) = self.load_data(&records) {
+                                    let _: &egui::TextureHandle =
+                                        self.background.get_or_insert_with(|| {
+                                            ctx.load_texture("background", back, Default::default())
+                                        });
+
+                                    let _: &egui::TextureHandle =
+                                        self.foreground.get_or_insert_with(|| {
+                                            ctx.load_texture("foreground", fore, Default::default())
                                         });
                                 }
                             }
@@ -326,6 +387,8 @@ impl eframe::App for TemplateApp {
 
                 ui.separator();
 
+                ui.add(egui::Slider::new(&mut self.ui_data.alpha, 0..=255).text("Alpha"));
+
                 ui.color_edit_button_srgba(&mut self.ui_data.height_base);
                 ui.add(
                     egui::Slider::new(&mut self.ui_data.height_spectrum, 0..=360)
@@ -340,15 +403,25 @@ impl eframe::App for TemplateApp {
                     self.ui_data = UiData::default();
                 }
                 if ui.button("Reload").clicked() {
-                    let img = create_image(&self.pixels, self.dimensions, self.ui_data);
-                    let handle = ui.ctx().load_texture("my-image", img, Default::default());
-                    self.texture = Some(handle);
+                    let img = create_image(&self.heights, self.dimensions, self.ui_data);
+
+                    let mut img2 = ColorImage::new(self.dimensions.size(), Color32::TRANSPARENT);
+                    self.color_pixels_reload();
+                    img2.pixels = self.pixel_color.clone();
+
+                    self.background =
+                        Some(ui.ctx().load_texture("background", img, Default::default()));
+                    self.foreground = Some(ui.ctx().load_texture(
+                        "foreground",
+                        img2,
+                        Default::default(),
+                    ));
                 }
             });
 
             ui.separator();
 
-            if self.pixels.is_empty() {
+            if self.heights.is_empty() {
                 return;
             }
 
@@ -392,8 +465,11 @@ impl eframe::App for TemplateApp {
             let from_screen = to_screen.inverse();
 
             // paint
-            if let Some(texture) = &self.texture {
-                painter.image(texture.into(), canvas, uv, Color32::WHITE)
+            if let Some(texture) = &self.background {
+                painter.image(texture.into(), canvas, uv, Color32::WHITE);
+            }
+            if let Some(texture) = &self.foreground {
+                painter.image(texture.into(), canvas, uv, Color32::WHITE);
             }
 
             // hover
@@ -404,8 +480,8 @@ impl eframe::App for TemplateApp {
                 let canvas_pos_y = canvas_pos.y as i32;
                 let i = ((canvas_pos_y * self.dimensions.nx()) + canvas_pos_x) as usize;
 
-                if i < self.pixels.len() {
-                    let value = self.pixels[i];
+                if i < self.heights.len() {
+                    let value = self.heights[i];
 
                     let x = canvas_pos.x as usize / VERTEX_CNT;
                     let y = canvas_pos.y as usize / VERTEX_CNT;

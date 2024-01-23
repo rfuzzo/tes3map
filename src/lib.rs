@@ -20,6 +20,7 @@ pub struct UiData {
     pub depth_base: Color32,
     pub height_spectrum: usize,
     pub height_base: Color32,
+    pub alpha: u8,
 }
 
 impl Default for UiData {
@@ -29,6 +30,7 @@ impl Default for UiData {
             depth_base: Color32::BLUE,
             height_spectrum: 120,
             height_base: Color32::DARK_GREEN,
+            alpha: 20,
         }
     }
 }
@@ -218,7 +220,55 @@ impl Dimensions {
     }
 }
 
-fn generate_pixels(
+fn get_color_pixels(
+    dimensions: Dimensions,
+    color_map: HashMap<(i32, i32), [[Color32; 65]; 65]>,
+) -> Vec<Color32> {
+    // dimensions
+    let max_x = dimensions.max_x;
+    let min_x = dimensions.min_x;
+    let max_y = dimensions.max_y;
+    let min_y = dimensions.min_y;
+
+    let nx = dimensions.nx();
+    let ny = dimensions.ny();
+    let size = nx as usize * ny as usize;
+    let mut pixels_color = vec![Color32::BLACK; size];
+
+    for cy in min_y..max_y + 1 {
+        for cx in min_x..max_x + 1 {
+            let tx = VERTEX_CNT as i32 * dimensions.tranform_to_canvas_x(cx);
+            let ty = VERTEX_CNT as i32 * dimensions.tranform_to_canvas_y(cy);
+
+            if let Some(colors) = color_map.get(&(cx, cy)) {
+                for (y, row) in colors.iter().rev().enumerate() {
+                    for (x, value) in row.iter().enumerate() {
+                        let tx = tx + x as i32;
+                        let ty = ty + y as i32;
+
+                        let i = (ty * nx) + tx;
+                        pixels_color[i as usize] = *value;
+                    }
+                }
+            } else {
+                for y in 0..VERTEX_CNT {
+                    for x in 0..VERTEX_CNT {
+                        let tx = tx + x as i32;
+                        let ty = ty + y as i32;
+
+                        let i = (ty * nx) + tx;
+
+                        pixels_color[i as usize] = Color32::BLUE;
+                    }
+                }
+            }
+        }
+    }
+
+    pixels_color
+}
+
+fn decode_heights(
     dimensions: Dimensions,
     heights_map: HashMap<(i32, i32), [[f32; 65]; 65]>,
 ) -> Vec<f32> {
@@ -246,9 +296,7 @@ fn generate_pixels(
                         let ty = ty + y as i32;
 
                         let i = (ty * nx) + tx;
-                        if i as usize > size {
-                            panic!();
-                        }
+
                         pixels[i as usize] = *value;
                     }
                 }
@@ -259,9 +307,7 @@ fn generate_pixels(
                         let ty = ty + y as i32;
 
                         let i = (ty * nx) + tx;
-                        if i as usize > size {
-                            panic!();
-                        }
+
                         pixels[i as usize] = -1.0;
                     }
                 }
