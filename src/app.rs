@@ -1,23 +1,21 @@
 use std::collections::HashMap;
 
 use egui::{pos2, Color32, ColorImage, Rect, Sense};
-use palette::convert::FromColorUnclamped;
-use palette::{Hsv, IntoColor, LinSrgb};
 use tes3::esp::{Landscape, Plugin};
+
+use crate::{get_color_for_height, get_plugins_sorted};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
-    paint_all: bool,
-
     depth_spectrum: usize,
     depth_base: Color32,
     height_spectrum: usize,
     height_base: Color32,
 
     #[serde(skip)]
-    heights_map: HashMap<(i32, i32), [[f32; 65]; 65]>,
+    pixels: Vec<f32>,
     #[serde(skip)]
     landscape_records: HashMap<(i32, i32), Landscape>,
 
@@ -46,12 +44,11 @@ pub struct TemplateApp {
 impl Default for TemplateApp {
     fn default() -> Self {
         Self {
-            paint_all: Default::default(),
             depth_spectrum: 20,
             depth_base: Color32::BLUE,
             height_spectrum: 120,
             height_base: Color32::DARK_GREEN,
-            heights_map: Default::default(),
+            pixels: Vec::default(),
             landscape_records: Default::default(),
             texture: Default::default(),
             info: Default::default(),
@@ -81,7 +78,7 @@ impl TemplateApp {
         Default::default()
     }
 
-    fn load_data(&mut self, plugin: Plugin) {
+    fn load_data(&mut self, records: &HashMap<(i32, i32), Landscape>) -> ColorImage {
         // clear
         self.texture = None;
         self.landscape_records.clear();
@@ -90,16 +87,14 @@ impl TemplateApp {
         self.min_y = 0;
         self.max_y = 0;
 
+        // get dimensions
         let mut min_x: Option<i32> = None;
         let mut min_y: Option<i32> = None;
         let mut max_x: Option<i32> = None;
         let mut max_y: Option<i32> = None;
-        let mut min_z: Option<f32> = None;
-        let mut max_z: Option<f32> = None;
 
-        for record in plugin.into_objects_of_type::<Landscape>() {
+        for key in records.keys() {
             // get grid dimensions
-            let key = record.grid;
             let x = key.0;
             let y = key.1;
 
@@ -131,9 +126,6 @@ impl TemplateApp {
             } else {
                 max_y = Some(y);
             }
-
-            // store records
-            self.landscape_records.insert(key, record);
         }
 
         self.min_x = min_x.unwrap();
@@ -141,12 +133,27 @@ impl TemplateApp {
         self.max_x = max_x.unwrap();
         self.max_y = max_y.unwrap();
 
+        let map = self.calculate_heights(records);
+        self.generate_pixels(map)
+    }
+
+    fn calculate_heights(
+        &mut self,
+        landscape_records: &HashMap<(i32, i32), Landscape>,
+    ) -> HashMap<(i32, i32), [[f32; 65]; 65]> {
         // calculate heights
+
+        self.min_z = 0_f32;
+        self.max_z = 0_f32;
+        let mut min_z: Option<f32> = None;
+        let mut max_z: Option<f32> = None;
+
+        let mut heights_map: HashMap<(i32, i32), [[f32; 65]; 65]> = HashMap::default();
         for cy in self.min_y..self.max_y + 1 {
             for cx in self.min_x..self.max_x + 1 {
                 //let mut heights_vec = vec![];
 
-                if let Some(landscape) = &self.landscape_records.get(&(cx, cy)) {
+                if let Some(landscape) = landscape_records.get(&(cx, cy)) {
                     // get vertex data
                     if let Some(vertex_heights) = &landscape.vertex_heights {
                         // get data
@@ -160,19 +167,19 @@ impl TemplateApp {
 
                         // decode
                         let mut offset: f32 = vertex_heights.offset;
-                        for y in 0..VERTEX_CNT {
-                            for x in 0..VERTEX_CNT {
-                                offset += heights[y][x];
-                                heights[y][x] = offset;
+                        for row in heights.iter_mut().take(VERTEX_CNT) {
+                            for x in row.iter_mut().take(VERTEX_CNT) {
+                                offset += *x;
+                                *x = offset;
                             }
-                            offset = heights[y][0];
+                            offset = row[0];
                         }
 
                         for row in &mut heights {
                             for height in row {
                                 *height *= 8.0;
 
-                                let z = height.clone();
+                                let z = *height;
                                 if let Some(minz) = min_z {
                                     if z < minz {
                                         min_z = Some(z);
@@ -190,28 +197,31 @@ impl TemplateApp {
                             }
                         }
 
-                        self.heights_map.insert((cx, cy), heights);
+                        heights_map.insert((cx, cy), heights);
                     }
                 }
             }
         }
 
+        self.landscape_records = landscape_records.clone();
         self.min_z = min_z.unwrap();
         self.max_z = max_z.unwrap();
+
+        heights_map
     }
 
-    fn generate_image(&mut self) -> ColorImage {
+    fn generate_pixels(&mut self, heights_map: HashMap<(i32, i32), [[f32; 65]; 65]>) -> ColorImage {
         // dimensions
         let nx = (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32);
         let ny = (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32);
-        let mut pixel: Vec<f32> = vec![-1.0; nx as usize * ny as usize];
+        let mut pixels = vec![-1.0; nx as usize * ny as usize];
 
         for cy in self.min_y..self.max_y + 1 {
             for cx in self.min_x..self.max_x + 1 {
                 let tx = cx - self.min_x;
                 let ty = self.max_y - cy;
 
-                if let Some(heights) = self.heights_map.get(&(cx, cy)) {
+                if let Some(heights) = heights_map.get(&(cx, cy)) {
                     // look up heightmap
                     for (y, row) in heights.iter().enumerate() {
                         for (x, value) in row.iter().enumerate() {
@@ -219,7 +229,7 @@ impl TemplateApp {
                             let y_f32 = (VERTEX_CNT as i32 * ty) + (VERTEX_CNT as i32 - y as i32);
 
                             let i = (y_f32 * nx) + x_f32;
-                            pixel[i as usize] = *value;
+                            pixels[i as usize] = *value;
                         }
                     }
                 } else {
@@ -229,114 +239,39 @@ impl TemplateApp {
                             let y_f32 = (VERTEX_CNT as i32 * ty) + y as i32;
 
                             let i = (y_f32 * nx) + x_f32;
-                            pixel[i as usize] = -1.0;
+                            pixels[i as usize] = -1.0;
                         }
                     }
                 }
             }
         }
 
-        let size = [nx as usize, ny as usize];
-        let mut img = ColorImage::new(size, Color32::BLUE);
-        let p = pixel
-            .iter()
-            .map(|f| self.get_color_for_height(*f))
-            .collect::<Vec<_>>();
-        img.pixels = p;
-
+        let img = self.get_image(&pixels);
+        self.pixels = pixels;
         img
     }
 
-    // fn paint_cell(&mut self, to_screen: emath::RectTransform) {
-    //     if let Some(landscape) = &self.current_landscape {
-    //         if let Some(heights) = self.heights_map.get(&(landscape.grid.0, landscape.grid.1)) {
-    //             for (y, row) in heights.iter().enumerate() {
-    //                 for (x, value) in row.iter().enumerate() {
-    //                     let color = get_color_for_height(*value);
-    //                     // map to screen space
-    //                     let x_f32 = x as f32;
-    //                     let y_f32 = (VERTEX_CNT - y) as f32;
-    //                     let min = to_screen * pos2(x_f32, y_f32);
-    //                     let max = to_screen * pos2(x_f32 + ZOOM, y_f32 + ZOOM);
-    //                     let rect = Rect::from_min_max(min, max);
-    //                     let shape = egui::Shape::rect_filled(rect, Rounding::default(), color);
-    //                     //self.shapes.push(shape);
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-    fn get_color_for_height(&mut self, value: f32) -> Color32 {
-        if value < 0.0 {
-            self.depth_to_color(value)
-        } else {
-            self.height_to_color(value)
-        }
-    }
-
-    fn height_to_color(&mut self, height: f32) -> Color32 {
-        let b: LinSrgb<u8> = LinSrgb::from_components((
-            self.height_base.r(),
-            self.height_base.g(),
-            self.height_base.b(),
-        ));
-        let base = Hsv::from_color_unclamped(b.into_format::<f32>());
-
-        // Normalize the height to the range [0.0, 1.0]
-        let normalized_height = height / self.max_z;
-
-        // Map normalized height to hue in the range [120.0, 30.0] (green to brown)
-        // let hue = 120.0 - normalized_height * self.height_spectrum as f32;
-        // let saturation = 1.0;
-        // let value = 0.65;
-
-        let hue = base.hue - normalized_height * self.height_spectrum as f32;
-        let saturation = base.saturation;
-        let value = 0.65;
-        //base.value;
-
-        // Create an HSV color
-        let color = Hsv::new(hue, saturation, value);
-
-        // Convert HSV to linear RGB
-        let linear_rgb: LinSrgb = color.into_color();
-
-        // Convert linear RGB to gamma-corrected RGB
-        let c: LinSrgb<u8> = linear_rgb.into_format();
-
-        Color32::from_rgb(c.red, c.green, c.blue)
-    }
-
-    fn depth_to_color(&mut self, depth: f32) -> Color32 {
-        let b: LinSrgb<u8> = LinSrgb::from_components((
-            self.depth_base.r(),
-            self.depth_base.g(),
-            self.depth_base.b(),
-        ));
-        let base = Hsv::from_color_unclamped(b.into_format::<f32>());
-
-        // Normalize the depth to the range [0.0, 1.0]
-        let normalized_depth = -depth / self.min_z;
-
-        // Map normalized depth to hue in the range [240.0, 180.0] (blue to light blue)
-        // let hue = 240.0 - normalized_depth * self.depth_spectrum as f32;
-        // let saturation = 1.0;
-        // let value = 0.8;
-
-        let hue = base.hue - normalized_depth * self.depth_spectrum as f32;
-        let saturation = base.saturation;
-        let value = base.value;
-
-        // Create an HSV color
-        let color = Hsv::new(hue, saturation, value);
-
-        // Convert HSV to linear RGB
-        let linear_rgb: LinSrgb = color.into_color();
-
-        // Convert linear RGB to gamma-corrected RGB
-        let c: LinSrgb<u8> = linear_rgb.into_format();
-        Color32::from_rgb(c.red, c.green, c.blue)
+    fn get_image(&self, pixels: &[f32]) -> ColorImage {
+        let nx = (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32);
+        let ny = (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32);
+        let size = [nx as usize, ny as usize];
+        let mut img = ColorImage::new(size, Color32::BLUE);
+        let p = pixels
+            .iter()
+            .map(|f| {
+                get_color_for_height(
+                    *f,
+                    self.height_base,
+                    self.height_spectrum,
+                    self.max_z,
+                    self.depth_base,
+                    self.depth_spectrum,
+                    self.min_z,
+                )
+            })
+            .collect::<Vec<_>>();
+        img.pixels = p;
+        img
     }
 }
 
@@ -352,7 +287,38 @@ impl eframe::App for TemplateApp {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.button("Load").clicked() {
+                    if ui.button("Load folder").clicked() {
+                        let folder_option = rfd::FileDialog::new()
+                            .add_filter("esm", &["esm"])
+                            .add_filter("esp", &["esp"])
+                            .pick_folder();
+
+                        if let Some(path) = folder_option {
+                            let plugins = get_plugins_sorted(&path, false);
+
+                            let mut records: HashMap<(i32, i32), Landscape> = HashMap::default();
+                            for path in plugins {
+                                let mut plugin = Plugin::new();
+                                if plugin.load_path(&path).is_ok() {
+                                    for r in plugin.into_objects_of_type::<Landscape>() {
+                                        let key = r.grid;
+                                        records.insert(key, r);
+                                    }
+                                }
+                            }
+
+                            let img = self.load_data(&records);
+                            let _texture: &egui::TextureHandle =
+                                self.texture.get_or_insert_with(|| {
+                                    // Load the texture only once.
+                                    ui.ctx().load_texture("my-image", img, Default::default())
+                                });
+                        }
+
+                        ui.close_menu();
+                    }
+
+                    if ui.button("Load plugin").clicked() {
                         let file_option = rfd::FileDialog::new()
                             .add_filter("esm", &["esm"])
                             .add_filter("esp", &["esp"])
@@ -360,9 +326,19 @@ impl eframe::App for TemplateApp {
 
                         if let Some(path) = file_option {
                             let mut plugin = Plugin::new();
-
                             if plugin.load_path(&path).is_ok() {
-                                self.load_data(plugin);
+                                let mut records: HashMap<(i32, i32), Landscape> =
+                                    HashMap::default();
+                                for r in plugin.into_objects_of_type::<Landscape>() {
+                                    let key = r.grid;
+                                    records.insert(key, r);
+                                }
+                                let img = self.load_data(&records);
+                                let _texture: &egui::TextureHandle =
+                                    self.texture.get_or_insert_with(|| {
+                                        // Load the texture only once.
+                                        ui.ctx().load_texture("my-image", img, Default::default())
+                                    });
                             }
                         }
 
@@ -381,38 +357,10 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
-            ui.heading("Cells");
-            ui.checkbox(&mut self.paint_all, "Paint whole map");
-
-            ui.separator();
-
-            egui::ScrollArea::vertical()
-                .auto_shrink([false; 2])
-                .show(ui, |ui| {
-                    for y in (self.min_y..=self.max_y).rev() {
-                        let mut any = false;
-                        for x in self.min_x..=self.max_x {
-                            if let Some(_v) = self.landscape_records.get(&(x, y)) {
-                                any = true;
-                            }
-                        }
-                        if any {
-                            ui.collapsing(format!("Y: {y}"), |ui| {
-                                for x in self.min_x..=self.max_x {
-                                    if let Some(v) = self.landscape_records.get(&(x, y)) {
-                                        if ui.button(format!("({x},{y})")).clicked() {
-                                            // store
-                                            self.texture = None;
-                                            self.current_landscape = Some(v.clone());
-                                        }
-                                    }
-                                }
-                            });
-                        }
-                    }
-                });
-        });
+        // egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
+        //     ui.heading("Cells");
+        //     ui.separator();
+        // });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
@@ -426,46 +374,28 @@ impl eframe::App for TemplateApp {
                 ui.color_edit_button_srgba(&mut self.depth_base);
                 ui.add(egui::Slider::new(&mut self.depth_spectrum, 0..=360).text("Depth offset"));
                 if ui.button("Reload").clicked() {
-                    self.texture = None;
+                    let img = self.get_image(&self.pixels);
+                    let handle = ui.ctx().load_texture("my-image", img, Default::default());
+                    self.texture = Some(handle);
                 }
             });
             ui.separator();
 
-            if self.heights_map.is_empty() {
+            if self.pixels.is_empty() {
                 return;
             }
 
             let (response, painter) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::hover());
 
-            let _from = if self.paint_all {
-                let nx = (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32);
-                let ny = (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32);
-
-                egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(nx as f32, ny as f32))
-            } else {
-                egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(VERTEX_CNT as f32, VERTEX_CNT as f32))
-            };
+            let nx = (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32);
+            let ny = (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32);
+            let _from = egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(nx as f32, ny as f32));
 
             //let to_screen = egui::emath::RectTransform::from_to(from, response.rect);
             //let from_screen = to_screen.inverse();
 
             // paint
-            if self.paint_all {
-                if self.texture.is_none() {
-                    let img = self.generate_image();
-                    let _texture: &egui::TextureHandle = self.texture.get_or_insert_with(|| {
-                        // Load the texture only once.
-                        ui.ctx().load_texture("my-image", img, Default::default())
-                    });
-                }
-            }
-            // else if self.pixel.is_empty() {
-            //     // cell vertex heights
-            //     self.paint_cell(to_screen);
-            // }
-
-            //painter.extend(self.shapes.clone());
             if let Some(texture) = &self.texture {
                 painter.image(
                     texture.into(),
