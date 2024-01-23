@@ -1,9 +1,11 @@
 use std::{collections::HashMap, env, path::PathBuf};
 
-use egui::{pos2, Color32, ColorImage, Rect, Sense};
+use egui::{pos2, Color32, ColorImage, Pos2, Rect, Sense, Vec2};
 use tes3::esp::{Landscape, Plugin};
 
-use crate::{create_image, generate_pixels, get_plugins_sorted, Dimensions, UiData, VERTEX_CNT};
+use crate::{
+    create_image, generate_pixels, get_plugins_sorted, Dimensions, UiData, ZoomData, VERTEX_CNT,
+};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(Default, serde::Deserialize, serde::Serialize)]
@@ -26,8 +28,15 @@ pub struct TemplateApp {
 
     // ui
     ui_data: UiData,
+
     #[serde(skip)]
     info: String,
+
+    #[serde(skip)]
+    zoom_data: ZoomData,
+
+    #[serde(skip)]
+    zinfo: String,
 }
 
 impl TemplateApp {
@@ -200,6 +209,16 @@ impl TemplateApp {
             });
         }
     }
+
+    fn reset_zoom(&mut self) {
+        self.zoom_data.zoom = 1.0;
+    }
+
+    fn reset_pan(&mut self) {
+        self.zoom_data.drag_delta = None;
+        self.zoom_data.drag_offset = Pos2::default();
+        self.zoom_data.drag_start = Pos2::default();
+    }
 }
 
 impl eframe::App for TemplateApp {
@@ -298,9 +317,15 @@ impl eframe::App for TemplateApp {
             ui.horizontal(|ui| {
                 ui.label("Info: ");
                 ui.label(&self.info);
+                ui.separator();
+                ui.label(&self.zinfo);
             });
             // toolbar
             ui.horizontal(|ui| {
+                //ui.add(egui::Slider::new(&mut self.zoom_data.zoom2, 0..=100).text("Zoom"));
+
+                ui.separator();
+
                 ui.color_edit_button_srgba(&mut self.ui_data.height_base);
                 ui.add(
                     egui::Slider::new(&mut self.ui_data.height_spectrum, 0..=360)
@@ -329,24 +354,46 @@ impl eframe::App for TemplateApp {
 
             // painter
             let (response, painter) =
-                ui.allocate_painter(ui.available_size_before_wrap(), Sense::hover());
+                ui.allocate_painter(ui.available_size_before_wrap(), Sense::click_and_drag());
 
+            // panning and zooming
+
+            if let Some(delta) = self.zoom_data.drag_delta.take() {
+                self.zoom_data.drag_offset += delta.to_vec2();
+            }
+
+            // move to center zoom
+            if let Some(z) = self.zoom_data.zoom_delta.take() {
+                let r = z - 1.0;
+                self.zoom_data.zoom += r;
+
+                // TODO
+                if let Some(pointer_pos) = response.hover_pos() {
+                    let d = pointer_pos * r;
+
+                    self.zoom_data.drag_offset -= d.to_vec2();
+                }
+            }
+
+            // TODO cut off pan at (0,0)
+            let min = self.zoom_data.drag_offset;
+            let max =
+                response.rect.max * self.zoom_data.zoom + self.zoom_data.drag_offset.to_vec2();
+            let canvas = Rect::from_min_max(min, max);
+            let uv = Rect::from_min_max(pos2(0.0, 0.0), Pos2::new(1.0, 1.0));
+
+            // transforms
+            let to = canvas;
             let from = egui::Rect::from_min_max(
                 pos2(0.0, 0.0),
                 pos2(self.dimensions.nx() as f32, self.dimensions.ny() as f32),
             );
-
-            let to_screen = egui::emath::RectTransform::from_to(from, response.rect);
+            let to_screen = egui::emath::RectTransform::from_to(from, to);
             let from_screen = to_screen.inverse();
 
             // paint
             if let Some(texture) = &self.texture {
-                painter.image(
-                    texture.into(),
-                    response.rect,
-                    Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-                    Color32::WHITE,
-                )
+                painter.image(texture.into(), canvas, uv, Color32::WHITE)
             }
 
             // hover
@@ -356,6 +403,7 @@ impl eframe::App for TemplateApp {
                 let canvas_pos_x = canvas_pos.x as i32;
                 let canvas_pos_y = canvas_pos.y as i32;
                 let i = ((canvas_pos_y * self.dimensions.nx()) + canvas_pos_x) as usize;
+
                 if i < self.pixels.len() {
                     let value = self.pixels[i];
 
@@ -363,8 +411,30 @@ impl eframe::App for TemplateApp {
                     let y = canvas_pos.y as usize / VERTEX_CNT;
                     let cx = self.dimensions.tranform_to_cell_x(x as i32);
                     let cy = self.dimensions.tranform_to_cell_y(y as i32);
-                    self.info = format!("({}, {}), height: {}", cx, cy, value,);
+                    self.info = format!("({}, {}), height: {}", cx, cy, value);
                 }
+            }
+            // panning
+            if response.drag_started() {
+                if let Some(drag_start) = response.interact_pointer_pos() {
+                    self.zoom_data.drag_start = drag_start;
+                }
+            } else if response.dragged() {
+                if let Some(current_pos) = response.interact_pointer_pos() {
+                    let delta = current_pos - self.zoom_data.drag_start.to_vec2();
+                    self.zoom_data.drag_delta = Some(delta);
+                    self.zoom_data.drag_start = current_pos;
+                }
+            }
+            // zoom
+            let delta = ctx.input(|i| i.zoom_delta());
+            if delta != 1.0 {
+                self.zoom_data.zoom_delta = Some(delta);
+            }
+
+            if response.middle_clicked() {
+                self.reset_zoom();
+                self.reset_pan();
             }
         });
     }

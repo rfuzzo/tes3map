@@ -8,7 +8,7 @@ use std::{
 };
 
 pub use app::TemplateApp;
-use egui::{Color32, ColorImage};
+use egui::{Color32, ColorImage, Pos2};
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +41,28 @@ pub struct Dimensions {
     pub max_y: i32,
     pub min_z: f32,
     pub max_z: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ZoomData {
+    drag_start: Pos2,
+    drag_delta: Option<Pos2>,
+    drag_offset: Pos2,
+
+    zoom: f32,
+    zoom_delta: Option<f32>,
+}
+
+impl Default for ZoomData {
+    fn default() -> Self {
+        Self {
+            drag_start: Default::default(),
+            drag_delta: Default::default(),
+            drag_offset: Default::default(),
+            zoom: 1.0,
+            zoom_delta: Default::default(),
+        }
+    }
 }
 
 /// Get all plugins (esp, omwaddon, omwscripts) in a folder
