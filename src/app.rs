@@ -44,6 +44,8 @@ impl TemplateApp {
 
     /// Assigns landscape_records, dimensions and pixels
     fn load_data(&mut self, records: &HashMap<(i32, i32), Landscape>) -> Option<ColorImage> {
+        self.texture = None;
+
         // get dimensions
         let mut min_x: Option<i32> = None;
         let mut min_y: Option<i32> = None;
@@ -287,6 +289,9 @@ impl eframe::App for TemplateApp {
                     egui::Slider::new(&mut self.ui_data.depth_spectrum, 0..=360)
                         .text("Depth offset"),
                 );
+                if ui.button("Default").clicked() {
+                    self.ui_data = UiData::default();
+                }
                 if ui.button("Reload").clicked() {
                     let img = create_image(&self.pixels, self.dimensions, self.ui_data);
                     let handle = ui.ctx().load_texture("my-image", img, Default::default());
