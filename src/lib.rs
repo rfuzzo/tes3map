@@ -12,6 +12,37 @@ use egui::{Color32, ColorImage};
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
+const VERTEX_CNT: usize = 65;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct UiData {
+    pub depth_spectrum: usize,
+    pub depth_base: Color32,
+    pub height_spectrum: usize,
+    pub height_base: Color32,
+}
+
+impl Default for UiData {
+    fn default() -> Self {
+        Self {
+            depth_spectrum: 20,
+            depth_base: Color32::BLUE,
+            height_spectrum: 120,
+            height_base: Color32::DARK_GREEN,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Dimensions {
+    pub min_x: i32,
+    pub min_y: i32,
+    pub max_x: i32,
+    pub max_y: i32,
+    pub min_z: f32,
+    pub max_z: f32,
+}
+
 /// Get all plugins (esp, omwaddon, omwscripts) in a folder
 fn get_plugins_in_folder<P>(path: &P, use_omw_plugins: bool) -> Vec<PathBuf>
 where
@@ -135,26 +166,6 @@ fn depth_to_color(depth: f32, dimensions: Dimensions, ui_data: UiData) -> Color3
     // Convert linear RGB to gamma-corrected RGB
     let c: LinSrgb<u8> = linear_rgb.into_format();
     Color32::from_rgb(c.red, c.green, c.blue)
-}
-
-const VERTEX_CNT: usize = 65;
-
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
-pub struct UiData {
-    pub depth_spectrum: usize,
-    pub depth_base: Color32,
-    pub height_spectrum: usize,
-    pub height_base: Color32,
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct Dimensions {
-    pub min_x: i32,
-    pub min_y: i32,
-    pub max_x: i32,
-    pub max_y: i32,
-    pub min_z: f32,
-    pub max_z: f32,
 }
 
 impl Dimensions {
