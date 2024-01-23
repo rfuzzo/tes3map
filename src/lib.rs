@@ -2,13 +2,15 @@
 
 mod app;
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
 
 pub use app::TemplateApp;
-use egui::Color32;
+use egui::{Color32, ColorImage};
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
+use serde::{Deserialize, Serialize};
 
 /// Get all plugins (esp, omwaddon, omwscripts) in a folder
 fn get_plugins_in_folder<P>(path: &P, use_omw_plugins: bool) -> Vec<PathBuf>
@@ -63,41 +65,31 @@ where
     plugins
 }
 
-fn get_color_for_height(
-    value: f32,
-    height_base: Color32,
-    height_spectrum: usize,
-    max_z: f32,
-    depth_base: Color32,
-    depth_spectrum: usize,
-    min_z: f32,
-) -> Color32 {
+fn get_color_for_height(value: f32, dimensions: Dimensions, ui_data: UiData) -> Color32 {
     if value < 0.0 {
-        depth_to_color(value, depth_base, depth_spectrum, min_z)
+        depth_to_color(value, dimensions, ui_data)
     } else {
-        height_to_color(value, height_base, height_spectrum, max_z)
+        height_to_color(value, dimensions, ui_data)
     }
 }
 
-fn height_to_color(
-    height: f32,
-    height_base: Color32,
-    height_spectrum: usize,
-    max_z: f32,
-) -> Color32 {
-    let b: LinSrgb<u8> =
-        LinSrgb::from_components((height_base.r(), height_base.g(), height_base.b()));
+fn height_to_color(height: f32, dimensions: Dimensions, ui_data: UiData) -> Color32 {
+    let b: LinSrgb<u8> = LinSrgb::from_components((
+        ui_data.height_base.r(),
+        ui_data.height_base.g(),
+        ui_data.height_base.b(),
+    ));
     let base = Hsv::from_color_unclamped(b.into_format::<f32>());
 
     // Normalize the height to the range [0.0, 1.0]
-    let normalized_height = height / max_z;
+    let normalized_height = height / dimensions.max_z;
 
     // Map normalized height to hue in the range [120.0, 30.0] (green to brown)
     // let hue = 120.0 - normalized_height * self.height_spectrum as f32;
     // let saturation = 1.0;
     // let value = 0.65;
 
-    let hue = base.hue - normalized_height * height_spectrum as f32;
+    let hue = base.hue - normalized_height * ui_data.height_spectrum as f32;
     let saturation = base.saturation;
     let value = 0.65;
     //base.value;
@@ -114,19 +106,23 @@ fn height_to_color(
     Color32::from_rgb(c.red, c.green, c.blue)
 }
 
-fn depth_to_color(depth: f32, depth_base: Color32, depth_spectrum: usize, min_z: f32) -> Color32 {
-    let b: LinSrgb<u8> = LinSrgb::from_components((depth_base.r(), depth_base.g(), depth_base.b()));
+fn depth_to_color(depth: f32, dimensions: Dimensions, ui_data: UiData) -> Color32 {
+    let b: LinSrgb<u8> = LinSrgb::from_components((
+        ui_data.depth_base.r(),
+        ui_data.depth_base.g(),
+        ui_data.depth_base.b(),
+    ));
     let base = Hsv::from_color_unclamped(b.into_format::<f32>());
 
     // Normalize the depth to the range [0.0, 1.0]
-    let normalized_depth = -depth / min_z;
+    let normalized_depth = -depth / dimensions.min_z;
 
     // Map normalized depth to hue in the range [240.0, 180.0] (blue to light blue)
     // let hue = 240.0 - normalized_depth * depth_spectrum as f32;
     // let saturation = 1.0;
     // let value = 0.8;
 
-    let hue = base.hue - normalized_depth * depth_spectrum as f32;
+    let hue = base.hue - normalized_depth * ui_data.depth_spectrum as f32;
     let saturation = base.saturation;
     let value = base.value;
 
@@ -139,4 +135,93 @@ fn depth_to_color(depth: f32, depth_base: Color32, depth_spectrum: usize, min_z:
     // Convert linear RGB to gamma-corrected RGB
     let c: LinSrgb<u8> = linear_rgb.into_format();
     Color32::from_rgb(c.red, c.green, c.blue)
+}
+
+const VERTEX_CNT: usize = 65;
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+pub struct UiData {
+    pub depth_spectrum: usize,
+    pub depth_base: Color32,
+    pub height_spectrum: usize,
+    pub height_base: Color32,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Dimensions {
+    pub min_x: i32,
+    pub min_y: i32,
+    pub max_x: i32,
+    pub max_y: i32,
+    pub min_z: f32,
+    pub max_z: f32,
+}
+
+impl Dimensions {
+    fn nx(&self) -> i32 {
+        (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32)
+    }
+    fn ny(&self) -> i32 {
+        (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32)
+    }
+    fn size(&self) -> [usize; 2] {
+        [self.nx() as usize, self.ny() as usize]
+    }
+}
+
+fn generate_pixels(
+    dimensions: Dimensions,
+    heights_map: HashMap<(i32, i32), [[f32; 65]; 65]>,
+) -> Vec<f32> {
+    // dimensions
+    let max_x = dimensions.max_x;
+    let min_x = dimensions.min_x;
+    let max_y = dimensions.max_y;
+    let min_y = dimensions.min_y;
+
+    let nx = (1 + max_x - min_x) * (VERTEX_CNT as i32);
+    let ny = (1 + max_y - min_y) * (VERTEX_CNT as i32);
+    let mut pixels = vec![-1.0; nx as usize * ny as usize];
+
+    for cy in min_y..max_y + 1 {
+        for cx in min_x..max_x + 1 {
+            let tx = cx - min_x;
+            let ty = max_y - cy;
+
+            if let Some(heights) = heights_map.get(&(cx, cy)) {
+                // look up heightmap
+                for (y, row) in heights.iter().enumerate() {
+                    for (x, value) in row.iter().enumerate() {
+                        let x_f32 = (VERTEX_CNT as i32 * tx) + x as i32;
+                        let y_f32 = (VERTEX_CNT as i32 * ty) + (VERTEX_CNT as i32 - y as i32);
+
+                        let i = (y_f32 * nx) + x_f32;
+                        pixels[i as usize] = *value;
+                    }
+                }
+            } else {
+                for y in 0..VERTEX_CNT {
+                    for x in 0..VERTEX_CNT {
+                        let x_f32 = (VERTEX_CNT as i32 * tx) + x as i32;
+                        let y_f32 = (VERTEX_CNT as i32 * ty) + y as i32;
+
+                        let i = (y_f32 * nx) + x_f32;
+                        pixels[i as usize] = -1.0;
+                    }
+                }
+            }
+        }
+    }
+
+    pixels
+}
+
+fn create_image(pixels: &[f32], dimensions: Dimensions, ui_data: UiData) -> ColorImage {
+    let mut img = ColorImage::new(dimensions.size(), Color32::BLUE);
+    let p = pixels
+        .iter()
+        .map(|f| get_color_for_height(*f, dimensions, ui_data))
+        .collect::<Vec<_>>();
+    img.pixels = p;
+    img
 }
