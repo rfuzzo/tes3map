@@ -1,7 +1,6 @@
 use std::{collections::HashMap, env, path::PathBuf};
 
 use egui::{pos2, Color32, ColorImage, Pos2, Rect, Sense};
-use env_logger::fmt::style::Color;
 use tes3::esp::{Landscape, Plugin};
 
 use crate::{
