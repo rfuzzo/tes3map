@@ -296,6 +296,11 @@ impl eframe::App for TemplateApp {
                 self.dimensions.max_z
             ));
             ui.horizontal(|ui| {
+                ui.label("Info: ");
+                ui.label(&self.info);
+            });
+            // toolbar
+            ui.horizontal(|ui| {
                 ui.color_edit_button_srgba(&mut self.ui_data.height_base);
                 ui.add(
                     egui::Slider::new(&mut self.ui_data.height_spectrum, 0..=360)
@@ -315,22 +320,24 @@ impl eframe::App for TemplateApp {
                     self.texture = Some(handle);
                 }
             });
+
             ui.separator();
 
             if self.pixels.is_empty() {
                 return;
             }
 
+            // painter
             let (response, painter) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::hover());
 
-            let _from = egui::Rect::from_min_max(
+            let from = egui::Rect::from_min_max(
                 pos2(0.0, 0.0),
                 pos2(self.dimensions.nx() as f32, self.dimensions.ny() as f32),
             );
 
-            //let to_screen = egui::emath::RectTransform::from_to(from, response.rect);
-            //let from_screen = to_screen.inverse();
+            let to_screen = egui::emath::RectTransform::from_to(from, response.rect);
+            let from_screen = to_screen.inverse();
 
             // paint
             if let Some(texture) = &self.texture {
@@ -340,6 +347,24 @@ impl eframe::App for TemplateApp {
                     Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
                     Color32::WHITE,
                 )
+            }
+
+            // hover
+            if let Some(pointer_pos) = response.hover_pos() {
+                let canvas_pos = from_screen * pointer_pos;
+
+                let canvas_pos_x = canvas_pos.x as i32;
+                let canvas_pos_y = canvas_pos.y as i32;
+                let i = ((canvas_pos_y * self.dimensions.nx()) + canvas_pos_x) as usize;
+                if i < self.pixels.len() {
+                    let value = self.pixels[i];
+
+                    let x = canvas_pos.x as usize / VERTEX_CNT;
+                    let y = canvas_pos.y as usize / VERTEX_CNT;
+                    let cx = self.dimensions.tranform_to_cell_x(x as i32);
+                    let cy = self.dimensions.tranform_to_cell_y(y as i32);
+                    self.info = format!("({}, {}), height: {}", cx, cy, value,);
+                }
             }
         });
     }

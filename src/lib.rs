@@ -178,6 +178,22 @@ impl Dimensions {
     fn size(&self) -> [usize; 2] {
         [self.nx() as usize, self.ny() as usize]
     }
+
+    fn tranform_to_cell_x(&self, x: i32) -> i32 {
+        x + self.min_x
+    }
+
+    fn tranform_to_cell_y(&self, y: i32) -> i32 {
+        self.max_y - y
+    }
+
+    fn tranform_to_canvas_x(&self, x: i32) -> i32 {
+        x - self.min_x
+    }
+
+    fn tranform_to_canvas_y(&self, y: i32) -> i32 {
+        self.max_y - y
+    }
 }
 
 fn generate_pixels(
@@ -197,17 +213,17 @@ fn generate_pixels(
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
-            let tx = VERTEX_CNT as i32 * (cx - min_x);
-            let ty = VERTEX_CNT as i32 * (max_y - cy);
+            let tx = VERTEX_CNT as i32 * dimensions.tranform_to_canvas_x(cx);
+            let ty = VERTEX_CNT as i32 * dimensions.tranform_to_canvas_y(cy);
 
             if let Some(heights) = heights_map.get(&(cx, cy)) {
                 // look up heightmap
                 for (y, row) in heights.iter().rev().enumerate() {
                     for (x, value) in row.iter().enumerate() {
-                        let x_f32 = tx + x as i32;
-                        let y_f32 = ty + y as i32;
+                        let tx = tx + x as i32;
+                        let ty = ty + y as i32;
 
-                        let i = (y_f32 * nx) + x_f32;
+                        let i = (ty * nx) + tx;
                         if i as usize > size {
                             panic!();
                         }
@@ -217,10 +233,10 @@ fn generate_pixels(
             } else {
                 for y in 0..VERTEX_CNT {
                     for x in 0..VERTEX_CNT {
-                        let x_f32 = tx + x as i32;
-                        let y_f32 = ty + y as i32;
+                        let tx = tx + x as i32;
+                        let ty = ty + y as i32;
 
-                        let i = (y_f32 * nx) + x_f32;
+                        let i = (ty * nx) + tx;
                         if i as usize > size {
                             panic!();
                         }
