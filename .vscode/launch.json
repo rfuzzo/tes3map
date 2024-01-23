@@ -7,25 +7,6 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'tes3map'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--lib",
-                    "--package=tes3map"
-                ],
-                "filter": {
-                    "name": "tes3map",
-                    "kind": "lib"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
             "name": "Debug executable 'tes3map'",
             "cargo": {
                 "args": [
@@ -39,26 +20,8 @@
                 }
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            // /"cwd": "${workspaceFolder}"
+            "cwd": "D:\\games\\_test"
         },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in executable 'tes3map'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=tes3map",
-                    "--package=tes3map"
-                ],
-                "filter": {
-                    "name": "tes3map",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        }
     ]
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, env, path::PathBuf};
 
 use egui::{pos2, Color32, ColorImage, Rect, Sense};
 use tes3::esp::{Landscape, Plugin};
@@ -9,6 +9,9 @@ use crate::{create_image, generate_pixels, get_plugins_sorted, Dimensions, UiDat
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
+    #[serde(skip)]
+    cwd: Option<PathBuf>,
+
     // tes3
     #[serde(skip)]
     landscape_records: HashMap<(i32, i32), Landscape>,
@@ -172,6 +175,31 @@ impl TemplateApp {
 
         Some(img)
     }
+
+    fn load_folder(&mut self, path: &PathBuf, ctx: &egui::Context) {
+        let plugins = get_plugins_sorted(&path, false);
+
+        let mut records: HashMap<(i32, i32), Landscape> = HashMap::default();
+        for path in plugins {
+            let mut plugin = Plugin::new();
+            if plugin.load_path(&path).is_ok() {
+                let objects = plugin
+                    .into_objects_of_type::<Landscape>()
+                    .collect::<Vec<_>>();
+                for r in objects {
+                    let key = r.grid;
+                    records.insert(key, r);
+                }
+            }
+        }
+
+        if let Some(img) = self.load_data(&records) {
+            let _texture: &egui::TextureHandle = self.texture.get_or_insert_with(|| {
+                // Load the texture only once.
+                ctx.load_texture("my-image", img, Default::default())
+            });
+        }
+    }
 }
 
 impl eframe::App for TemplateApp {
@@ -182,6 +210,14 @@ impl eframe::App for TemplateApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.cwd.is_none() {
+            if let Ok(cwd) = env::current_dir() {
+                // load once
+                self.cwd = Some(cwd.clone());
+                self.load_folder(&cwd, ctx);
+            }
+        }
+
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
@@ -193,26 +229,7 @@ impl eframe::App for TemplateApp {
                             .pick_folder();
 
                         if let Some(path) = folder_option {
-                            let plugins = get_plugins_sorted(&path, false);
-
-                            let mut records: HashMap<(i32, i32), Landscape> = HashMap::default();
-                            for path in plugins {
-                                let mut plugin = Plugin::new();
-                                if plugin.load_path(&path).is_ok() {
-                                    for r in plugin.into_objects_of_type::<Landscape>() {
-                                        let key = r.grid;
-                                        records.insert(key, r);
-                                    }
-                                }
-                            }
-
-                            if let Some(img) = self.load_data(&records) {
-                                let _texture: &egui::TextureHandle =
-                                    self.texture.get_or_insert_with(|| {
-                                        // Load the texture only once.
-                                        ui.ctx().load_texture("my-image", img, Default::default())
-                                    });
-                            }
+                            self.load_folder(&path, ctx);
                         }
 
                         ui.close_menu();

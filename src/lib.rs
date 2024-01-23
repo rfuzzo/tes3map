@@ -190,33 +190,40 @@ fn generate_pixels(
     let max_y = dimensions.max_y;
     let min_y = dimensions.min_y;
 
-    let nx = (1 + max_x - min_x) * (VERTEX_CNT as i32);
-    let ny = (1 + max_y - min_y) * (VERTEX_CNT as i32);
-    let mut pixels = vec![-1.0; nx as usize * ny as usize];
+    let nx = dimensions.nx();
+    let ny = dimensions.ny();
+    let size = nx as usize * ny as usize;
+    let mut pixels = vec![-1.0; size];
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
-            let tx = cx - min_x;
-            let ty = max_y - cy;
+            let tx = VERTEX_CNT as i32 * (cx - min_x);
+            let ty = VERTEX_CNT as i32 * (max_y - cy);
 
             if let Some(heights) = heights_map.get(&(cx, cy)) {
                 // look up heightmap
-                for (y, row) in heights.iter().enumerate() {
+                for (y, row) in heights.iter().rev().enumerate() {
                     for (x, value) in row.iter().enumerate() {
-                        let x_f32 = (VERTEX_CNT as i32 * tx) + x as i32;
-                        let y_f32 = (VERTEX_CNT as i32 * ty) + (VERTEX_CNT as i32 - y as i32);
+                        let x_f32 = tx + x as i32;
+                        let y_f32 = ty + y as i32;
 
                         let i = (y_f32 * nx) + x_f32;
+                        if i as usize > size {
+                            panic!();
+                        }
                         pixels[i as usize] = *value;
                     }
                 }
             } else {
                 for y in 0..VERTEX_CNT {
                     for x in 0..VERTEX_CNT {
-                        let x_f32 = (VERTEX_CNT as i32 * tx) + x as i32;
-                        let y_f32 = (VERTEX_CNT as i32 * ty) + y as i32;
+                        let x_f32 = tx + x as i32;
+                        let y_f32 = ty + y as i32;
 
                         let i = (y_f32 * nx) + x_f32;
+                        if i as usize > size {
+                            panic!();
+                        }
                         pixels[i as usize] = -1.0;
                     }
                 }
