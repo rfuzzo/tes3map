@@ -1,0 +1,33 @@
+on: [push, pull_request]
+
+name: CI
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # automated checks
+  check:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
+      fail-fast: true
+      matrix:
+        os: [windows-latest]
+        build_type: [release]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build
+      run: cargo build --${{ matrix.build_type }}
+
+    - name: Run tests
+      run: cargo test
+    
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        path: target/${{ matrix.build_type }}/${{ matrix.target }}.exe
+
