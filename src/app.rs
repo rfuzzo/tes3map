@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, fs::File, io::Write, path::PathBuf};
+use std::{collections::HashMap, env, path::PathBuf};
 
 use egui::{pos2, reset_button, Color32, ColorImage, Pos2, Rect, Sense};
 use image::{DynamicImage, RgbaImage};
@@ -16,6 +16,8 @@ pub struct TemplateApp {
     // tes3
     #[serde(skip)]
     landscape_records: HashMap<(i32, i32), Landscape>,
+    #[serde(skip)]
+    texture_records: HashMap<u32, LandscapeTexture>,
 
     // painting
     #[serde(skip)]
@@ -28,6 +30,8 @@ pub struct TemplateApp {
     background: Option<egui::TextureHandle>,
     #[serde(skip)]
     foreground: Option<egui::TextureHandle>,
+    #[serde(skip)]
+    textured: Option<egui::TextureHandle>,
 
     #[serde(skip)]
     info: String,
@@ -55,11 +59,7 @@ impl TemplateApp {
     }
 
     /// Assigns landscape_records, dimensions and pixels
-    fn load_data(
-        &mut self,
-        records: &HashMap<(i32, i32), Landscape>,
-        _textures: &HashMap<u32, LandscapeTexture>,
-    ) -> Option<(ColorImage, ColorImage)> {
+    fn load_data(&mut self) -> Option<(ColorImage, ColorImage, ColorImage)> {
         self.background = None;
         self.foreground = None;
 
@@ -69,7 +69,7 @@ impl TemplateApp {
         let mut max_x: Option<i32> = None;
         let mut max_y: Option<i32> = None;
 
-        for key in records.keys() {
+        for key in self.landscape_records.keys() {
             // get grid dimensions
             let x = key.0;
             let y = key.1;
@@ -114,24 +114,22 @@ impl TemplateApp {
         let mut max_z: Option<f32> = None;
 
         let mut heights_map: HashMap<(i32, i32), [[f32; 65]; 65]> = HashMap::default();
-        let texture_map: HashMap<String, Vec<String>> = HashMap::default();
+        //let mut texture_map: HashMap<(i32, i32), Vec<String>> = HashMap::default();
 
         for cy in min_y..max_y + 1 {
             for cx in min_x..max_x + 1 {
-                if let Some(landscape) = records.get(&(cx, cy)) {
+                if let Some(landscape) = self.landscape_records.get(&(cx, cy)) {
                     // texture_indices
                     // if landscape
                     //     .landscape_flags
                     //     .contains(LandscapeFlags::USES_TEXTURES)
                     // {
-                    //     //println!("landscape ({},{})", cx, cy);
-
                     //     let data = &landscape.texture_indices.data;
                     //     let mut indices: Vec<String> = vec![];
                     //     for y in 0..16 {
                     //         for x in 0..16 {
                     //             let key = data[y][x] as u32;
-                    //             if let Some(tex) = textures.get(&key) {
+                    //             if let Some(tex) = self.texture_records.get(&key) {
                     //                 //println!("{x},{y}: {}", tex.file_name);
                     //                 indices.push(tex.file_name.to_owned());
                     //             } else {
@@ -140,7 +138,7 @@ impl TemplateApp {
                     //         }
                     //     }
 
-                    //     texture_map.insert(format!("{},{}", cx, cy), indices);
+                    //     texture_map.insert((cx, cy), indices);
                     // }
 
                     if landscape
@@ -212,7 +210,6 @@ impl TemplateApp {
         let img = create_image(&pixels, dimensions, self.ui_data);
 
         // assign data
-        self.landscape_records = records.clone();
         self.dimensions = dimensions;
         self.heights = pixels;
 
@@ -220,13 +217,15 @@ impl TemplateApp {
         let mut img2 = ColorImage::new(dimensions.size(), Color32::WHITE);
         img2.pixels = self.pixel_color.clone();
 
-        // dbg
-        let j = serde_json::to_string(&texture_map).expect("serialize");
-        let mut file = File::create("textures.json").expect("Unable to create file");
-        file.write_all(j.as_bytes())
-            .expect("Unable to write to file");
+        let img3 = self.get_textured_pixels().expect("textures");
 
-        Some((img, img2))
+        // dbg
+        // let j = serde_json::to_string(&texture_map).expect("serialize");
+        // let mut file = File::create("textures.json").expect("Unable to create file");
+        // file.write_all(j.as_bytes())
+        //     .expect("Unable to write to file");
+
+        Some((img, img2, img3))
     }
 
     fn color_pixels_reload(&mut self) {
@@ -294,7 +293,10 @@ impl TemplateApp {
             }
         }
 
-        if let Some((back, fore)) = self.load_data(&records, &textures) {
+        self.landscape_records = records;
+        self.texture_records = textures;
+
+        if let Some((back, fore, tex)) = self.load_data() {
             let _: &egui::TextureHandle = self
                 .background
                 .get_or_insert_with(|| ctx.load_texture("background", back, Default::default()));
@@ -302,6 +304,10 @@ impl TemplateApp {
             let _: &egui::TextureHandle = self
                 .foreground
                 .get_or_insert_with(|| ctx.load_texture("foreground", fore, Default::default()));
+
+            let _: &egui::TextureHandle = self
+                .textured
+                .get_or_insert_with(|| ctx.load_texture("textured", tex, Default::default()));
         }
     }
 
@@ -339,6 +345,9 @@ impl TemplateApp {
         ui.label("Overlays");
         ui.checkbox(&mut self.ui_data.overlay_terrain, "Show terrain map");
         ui.checkbox(&mut self.ui_data.overlay_paths, "Show overlay map");
+        ui.checkbox(&mut self.ui_data.overlay_textures, "Show textures");
+
+        ui.separator();
         ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");
 
         ui.label("Color");
@@ -397,13 +406,20 @@ impl TemplateApp {
                     textures.insert(key, r);
                 }
 
-                if let Some((back, fore)) = self.load_data(&records, &textures) {
+                self.landscape_records = records;
+                self.texture_records = textures;
+
+                if let Some((back, fore, tex)) = self.load_data() {
                     let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
                         ctx.load_texture("background", back, Default::default())
                     });
 
                     let _: &egui::TextureHandle = self.foreground.get_or_insert_with(|| {
                         ctx.load_texture("foreground", fore, Default::default())
+                    });
+
+                    let _: &egui::TextureHandle = self.textured.get_or_insert_with(|| {
+                        ctx.load_texture("textured", tex, Default::default())
                     });
                 }
             }
@@ -424,6 +440,105 @@ impl TemplateApp {
         let mut layered_img = ColorImage::new(self.dimensions.size(), Color32::TRANSPARENT);
         layered_img.pixels = layered;
         layered_img
+    }
+
+    fn get_textured_pixels(&self) -> std::io::Result<ColorImage> {
+        let d = self.dimensions;
+        let size = d.width_cells() * d.height_cells() * TEXTURE_GRID * TEXTURE_GRID;
+        let mut pixels_color = vec![Color32::BLUE; size as usize];
+        let nx = d.width_cells() * TEXTURE_GRID;
+
+        for cy in d.min_y..d.max_y + 1 {
+            for cx in d.min_x..d.max_x + 1 {
+                let tx = d.tranform_to_canvas_x(cx) * TEXTURE_GRID;
+                let ty = d.tranform_to_canvas_y(cy) * TEXTURE_GRID;
+
+                if let Some(landscape) = self.landscape_records.get(&(cx, cy)) {
+                    if landscape
+                        .landscape_flags
+                        .contains(LandscapeFlags::USES_TEXTURES)
+                    {
+                        // each tile is subdivided into a 16x16 grid
+                        let data = &landscape.texture_indices.data;
+                        let mut indices: Vec<String> = vec![];
+                        for y in 0..16 {
+                            for x in 0..16 {
+                                let key = data[y][x] as u32;
+                                if let Some(tex) = self.texture_records.get(&key) {
+                                    //println!("{x},{y}: {}", tex.file_name);
+                                    indices.push(tex.file_name.to_owned());
+                                } else {
+                                    indices.push("None".to_owned());
+                                }
+                            }
+                        }
+
+                        // just get the first for now
+                        let tex_path =
+                            PathBuf::from("D:\\games\\Morrowind2\\Data Files\\Textures\\")
+                                .join(&indices[0]);
+                        if tex_path.exists() {
+                            let mut reader = image::io::Reader::open(&tex_path).expect("open");
+                            let ext = tex_path.extension().unwrap().to_string_lossy();
+                            if ext.contains("tga") {
+                                reader.set_format(image::ImageFormat::Tga);
+                                continue;
+                            } else if ext.contains("dds") {
+                                reader.set_format(image::ImageFormat::Dds);
+                            } else {
+                                // do nothing
+                            }
+
+                            if let Ok(image) = reader.decode() {
+                                // convert?
+                                let image_buffer = image.to_rgba8();
+                                let pixels = image_buffer.as_flat_samples();
+                                let size = [image.width() as _, image.height() as _];
+                                let color_image =
+                                    ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+
+                                let pixels = color_image.pixels;
+
+                                for y in 0..TEXTURE_GRID {
+                                    for x in 0..TEXTURE_GRID {
+                                        let tx = tx + x as i32;
+                                        let ty = ty + y as i32;
+
+                                        let i = (ty * nx) + tx;
+
+                                        let index = (y * TEXTURE_GRID) + x;
+                                        let color = pixels[index as usize];
+                                        pixels_color[i as usize] = color;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // no landscape
+                    for y in 0..TEXTURE_GRID {
+                        for x in 0..TEXTURE_GRID {
+                            let tx = tx + x;
+                            let ty = ty + y;
+
+                            let i = (ty * nx) + tx;
+
+                            pixels_color[i as usize] = Color32::BLACK;
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut img = ColorImage::new(
+            [
+                d.width_cells() as usize * TEXTURE_GRID as usize,
+                d.height_cells() as usize * TEXTURE_GRID as usize,
+            ],
+            Color32::GOLD,
+        );
+        img.pixels = pixels_color;
+        Ok(img)
     }
 }
 
@@ -563,6 +678,11 @@ impl eframe::App for TemplateApp {
             }
             if self.ui_data.overlay_paths {
                 if let Some(texture) = &self.foreground {
+                    painter.image(texture.into(), canvas, uv, Color32::WHITE);
+                }
+            }
+            if self.ui_data.overlay_textures {
+                if let Some(texture) = &self.textured {
                     painter.image(texture.into(), canvas, uv, Color32::WHITE);
                 }
             }

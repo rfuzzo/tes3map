@@ -12,6 +12,7 @@ use egui::{Color32, ColorImage, Pos2};
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
+const TEXTURE_GRID: i32 = 256;
 const VERTEX_CNT: usize = 65;
 //const DEFAULT_COLOR: Color32 = Color32::from_rgb(34, 0, 204);
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
@@ -28,6 +29,7 @@ pub struct SavedUiData {
 
     pub overlay_terrain: bool,
     pub overlay_paths: bool,
+    pub overlay_textures: bool,
     pub show_tooltips: bool,
 }
 
@@ -46,6 +48,7 @@ impl Default for SavedUiData {
             // overlays
             overlay_terrain: true,
             overlay_paths: true,
+            overlay_textures: false,
             show_tooltips: false,
         }
     }
@@ -62,6 +65,13 @@ pub struct Dimensions {
 }
 
 impl Dimensions {
+    fn width_cells(&self) -> i32 {
+        1 + self.max_x - self.min_x
+    }
+    fn height_cells(&self) -> i32 {
+        1 + self.max_y - self.min_y
+    }
+
     fn width(&self) -> i32 {
         (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32)
     }
@@ -186,11 +196,6 @@ fn height_to_color(height: f32, dimensions: Dimensions, ui_data: SavedUiData) ->
     // Normalize the height to the range [0.0, 1.0]
     let normalized_height = height / dimensions.max_z;
 
-    // Map normalized height to hue in the range [120.0, 30.0] (green to brown)
-    // let hue = 120.0 - normalized_height * self.height_spectrum as f32;
-    // let saturation = 1.0;
-    // let value = 0.65;
-
     let hue = base.hue + normalized_height * ui_data.height_spectrum as f32;
     let saturation = base.saturation;
     let value = base.value;
@@ -217,11 +222,6 @@ fn depth_to_color(depth: f32, dimensions: Dimensions, ui_data: SavedUiData) -> C
 
     // Normalize the depth to the range [0.0, 1.0]
     let normalized_depth = depth / dimensions.min_z;
-
-    // Map normalized depth to hue in the range [240.0, 180.0] (blue to light blue)
-    // let hue = 240.0 - normalized_depth * depth_spectrum as f32;
-    // let saturation = 1.0;
-    // let value = 0.8;
 
     let hue = base.hue + normalized_depth * ui_data.depth_spectrum as f32;
     let saturation = base.saturation;
