@@ -4,8 +4,8 @@ use egui::{pos2, Color32, ColorImage, Pos2, Rect, Sense};
 use tes3::esp::{Landscape, Plugin};
 
 use crate::{
-    create_image, decode_heights, get_color_pixels, get_plugins_sorted, Dimensions, UiData,
-    ZoomData, VERTEX_CNT,
+    color_map_to_pixels, create_image, get_plugins_sorted, height_map_to_pixel_heights, Dimensions,
+    UiData, ZoomData, VERTEX_CNT,
 };
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -184,7 +184,7 @@ impl TemplateApp {
             max_z,
         };
 
-        let pixels = decode_heights(dimensions, heights_map);
+        let pixels = height_map_to_pixel_heights(dimensions, heights_map);
 
         let img = create_image(&pixels, dimensions, self.ui_data);
 
@@ -194,7 +194,7 @@ impl TemplateApp {
         self.heights = pixels;
 
         self.color_pixels_reload();
-        let mut img2 = ColorImage::new(dimensions.size(), Color32::TRANSPARENT);
+        let mut img2 = ColorImage::new(dimensions.size(), Color32::WHITE);
         img2.pixels = self.pixel_color.clone();
 
         Some((img, img2))
@@ -211,24 +211,26 @@ impl TemplateApp {
                     if let Some(vertex_colors) = &landscape.vertex_colors {
                         let data = vertex_colors.data.clone();
                         let mut colors: [[Color32; 65]; 65] =
-                            [[Color32::BLACK; VERTEX_CNT]; VERTEX_CNT];
+                            [[Color32::WHITE; VERTEX_CNT]; VERTEX_CNT];
+
                         for y in 0..VERTEX_CNT {
                             for x in 0..VERTEX_CNT {
-                                let rgb = data[y][x];
-                                let r = rgb[0];
-                                let g = rgb[1];
-                                let b = rgb[2];
-                                //println!("{},{},{}", r, g, b);
+                                let r = data[y][x][0];
+                                let g = data[y][x][1];
+                                let b = data[y][x][2];
 
-                                //let rgb = Color32::from_rgb(r, g, b);
-                                let rgb =
-                                    Color32::from_rgba_unmultiplied(r, g, b, self.ui_data.alpha);
-                                // let w = Color32::from_white_alpha(a)
-                                // let c = rgb.additive().to_opaque();
-                                // colors[y][x] = c;
+                                let ratio = (r as f32 + g as f32 + b as f32) / (3_f32 * 255_f32);
+                                let temp = (1_f32 - ratio).clamp(0.0, 1.0);
 
-                                // colors[y][x] =
-                                //     Color32::from_rgba_unmultiplied(r, g, b, self.ui_data.alpha);
+                                let c = self.ui_data.alpha as f32 / 100_f32;
+                                let alpha = if temp < c { temp / c } else { 1_f32 };
+
+                                let rgb = Color32::from_rgba_unmultiplied(
+                                    r,
+                                    g,
+                                    b,
+                                    (255_f32 * alpha) as u8,
+                                );
                                 colors[y][x] = rgb;
                             }
                         }
@@ -239,7 +241,7 @@ impl TemplateApp {
             }
         }
 
-        self.pixel_color = get_color_pixels(d, color_map);
+        self.pixel_color = color_map_to_pixels(d, color_map);
     }
 
     fn load_folder(&mut self, path: &PathBuf, ctx: &egui::Context) {
@@ -390,21 +392,23 @@ impl eframe::App for TemplateApp {
 
                 ui.color_edit_button_srgba(&mut self.ui_data.height_base);
                 ui.add(
-                    egui::Slider::new(&mut self.ui_data.height_spectrum, 0..=360)
+                    egui::Slider::new(&mut self.ui_data.height_spectrum, -360..=360)
                         .text("Height offset"),
                 );
+
                 ui.color_edit_button_srgba(&mut self.ui_data.depth_base);
                 ui.add(
-                    egui::Slider::new(&mut self.ui_data.depth_spectrum, 0..=360)
+                    egui::Slider::new(&mut self.ui_data.depth_spectrum, -360..=360)
                         .text("Depth offset"),
                 );
+
                 if ui.button("Default").clicked() {
                     self.ui_data = UiData::default();
                 }
                 if ui.button("Reload").clicked() {
                     let img = create_image(&self.heights, self.dimensions, self.ui_data);
 
-                    let mut img2 = ColorImage::new(self.dimensions.size(), Color32::TRANSPARENT);
+                    let mut img2 = ColorImage::new(self.dimensions.size(), Color32::WHITE);
                     self.color_pixels_reload();
                     img2.pixels = self.pixel_color.clone();
 
@@ -429,7 +433,6 @@ impl eframe::App for TemplateApp {
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::click_and_drag());
 
             // panning and zooming
-
             if let Some(delta) = self.zoom_data.drag_delta.take() {
                 self.zoom_data.drag_offset += delta.to_vec2();
             }

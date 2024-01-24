@@ -13,24 +13,32 @@ use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
 const VERTEX_CNT: usize = 65;
+//const DEFAULT_COLOR: Color32 = Color32::from_rgb(34, 0, 204);
+const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct UiData {
-    pub depth_spectrum: usize,
+    pub depth_spectrum: i32,
     pub depth_base: Color32,
-    pub height_spectrum: usize,
+
+    pub height_spectrum: i32,
     pub height_base: Color32,
+
     pub alpha: u8,
 }
 
 impl Default for UiData {
     fn default() -> Self {
         Self {
-            depth_spectrum: 20,
-            depth_base: Color32::BLUE,
-            height_spectrum: 120,
-            height_base: Color32::DARK_GREEN,
-            alpha: 20,
+            height_spectrum: -120,
+            // HSV(120,100,80)
+            height_base: Color32::from_rgb(0, 204, 0),
+
+            depth_spectrum: 70,
+            // HSV(180,100,80)
+            depth_base: Color32::from_rgb(0, 204, 204),
+
+            alpha: 100,
         }
     }
 }
@@ -144,10 +152,9 @@ fn height_to_color(height: f32, dimensions: Dimensions, ui_data: UiData) -> Colo
     // let saturation = 1.0;
     // let value = 0.65;
 
-    let hue = base.hue - normalized_height * ui_data.height_spectrum as f32;
+    let hue = base.hue + normalized_height * ui_data.height_spectrum as f32;
     let saturation = base.saturation;
-    let value = 0.65;
-    //base.value;
+    let value = base.value;
 
     // Create an HSV color
     let color = Hsv::new(hue, saturation, value);
@@ -170,14 +177,14 @@ fn depth_to_color(depth: f32, dimensions: Dimensions, ui_data: UiData) -> Color3
     let base = Hsv::from_color_unclamped(b.into_format::<f32>());
 
     // Normalize the depth to the range [0.0, 1.0]
-    let normalized_depth = -depth / dimensions.min_z;
+    let normalized_depth = depth / dimensions.min_z;
 
     // Map normalized depth to hue in the range [240.0, 180.0] (blue to light blue)
     // let hue = 240.0 - normalized_depth * depth_spectrum as f32;
     // let saturation = 1.0;
     // let value = 0.8;
 
-    let hue = base.hue - normalized_depth * ui_data.depth_spectrum as f32;
+    let hue = base.hue + normalized_depth * ui_data.depth_spectrum as f32;
     let saturation = base.saturation;
     let value = base.value;
 
@@ -220,7 +227,7 @@ impl Dimensions {
     }
 }
 
-fn get_color_pixels(
+fn color_map_to_pixels(
     dimensions: Dimensions,
     color_map: HashMap<(i32, i32), [[Color32; 65]; 65]>,
 ) -> Vec<Color32> {
@@ -233,7 +240,7 @@ fn get_color_pixels(
     let nx = dimensions.nx();
     let ny = dimensions.ny();
     let size = nx as usize * ny as usize;
-    let mut pixels_color = vec![Color32::BLACK; size];
+    let mut pixels_color = vec![Color32::WHITE; size];
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
@@ -258,7 +265,7 @@ fn get_color_pixels(
 
                         let i = (ty * nx) + tx;
 
-                        pixels_color[i as usize] = Color32::BLUE;
+                        pixels_color[i as usize] = DEFAULT_COLOR;
                     }
                 }
             }
@@ -268,7 +275,7 @@ fn get_color_pixels(
     pixels_color
 }
 
-fn decode_heights(
+fn height_map_to_pixel_heights(
     dimensions: Dimensions,
     heights_map: HashMap<(i32, i32), [[f32; 65]; 65]>,
 ) -> Vec<f32> {
@@ -319,7 +326,7 @@ fn decode_heights(
 }
 
 fn create_image(pixels: &[f32], dimensions: Dimensions, ui_data: UiData) -> ColorImage {
-    let mut img = ColorImage::new(dimensions.size(), Color32::BLUE);
+    let mut img = ColorImage::new(dimensions.size(), Color32::WHITE);
     let p = pixels
         .iter()
         .map(|f| get_color_for_height(*f, dimensions, ui_data))
