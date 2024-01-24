@@ -16,8 +16,8 @@ const VERTEX_CNT: usize = 65;
 //const DEFAULT_COLOR: Color32 = Color32::from_rgb(34, 0, 204);
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct UiData {
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct SavedUiData {
     pub depth_spectrum: i32,
     pub depth_base: Color32,
 
@@ -25,20 +25,28 @@ pub struct UiData {
     pub height_base: Color32,
 
     pub alpha: u8,
+
+    pub overlay_terrain: bool,
+    pub overlay_paths: bool,
+    pub show_tooltips: bool,
 }
 
-impl Default for UiData {
+impl Default for SavedUiData {
     fn default() -> Self {
         Self {
+            // map color settings
             height_spectrum: -120,
-            // HSV(120,100,80)
-            height_base: Color32::from_rgb(0, 204, 0),
+            height_base: Color32::from_rgb(0, 204, 0), // HSV(120,100,80)
 
             depth_spectrum: 70,
-            // HSV(180,100,80)
-            depth_base: Color32::from_rgb(0, 204, 204),
+            depth_base: Color32::from_rgb(0, 204, 204), // HSV(180,100,80)
 
             alpha: 100,
+
+            // overlays
+            overlay_terrain: true,
+            overlay_paths: true,
+            show_tooltips: false,
         }
     }
 }
@@ -128,7 +136,7 @@ where
     plugins
 }
 
-fn get_color_for_height(value: f32, dimensions: Dimensions, ui_data: UiData) -> Color32 {
+fn get_color_for_height(value: f32, dimensions: Dimensions, ui_data: SavedUiData) -> Color32 {
     if value < 0.0 {
         depth_to_color(value, dimensions, ui_data)
     } else {
@@ -136,7 +144,7 @@ fn get_color_for_height(value: f32, dimensions: Dimensions, ui_data: UiData) -> 
     }
 }
 
-fn height_to_color(height: f32, dimensions: Dimensions, ui_data: UiData) -> Color32 {
+fn height_to_color(height: f32, dimensions: Dimensions, ui_data: SavedUiData) -> Color32 {
     let b: LinSrgb<u8> = LinSrgb::from_components((
         ui_data.height_base.r(),
         ui_data.height_base.g(),
@@ -168,7 +176,7 @@ fn height_to_color(height: f32, dimensions: Dimensions, ui_data: UiData) -> Colo
     Color32::from_rgb(c.red, c.green, c.blue)
 }
 
-fn depth_to_color(depth: f32, dimensions: Dimensions, ui_data: UiData) -> Color32 {
+fn depth_to_color(depth: f32, dimensions: Dimensions, ui_data: SavedUiData) -> Color32 {
     let b: LinSrgb<u8> = LinSrgb::from_components((
         ui_data.depth_base.r(),
         ui_data.depth_base.g(),
@@ -325,7 +333,7 @@ fn height_map_to_pixel_heights(
     pixels
 }
 
-fn create_image(pixels: &[f32], dimensions: Dimensions, ui_data: UiData) -> ColorImage {
+fn create_image(pixels: &[f32], dimensions: Dimensions, ui_data: SavedUiData) -> ColorImage {
     let mut img = ColorImage::new(dimensions.size(), Color32::WHITE);
     let p = pixels
         .iter()

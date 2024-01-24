@@ -1,11 +1,11 @@
 use std::{collections::HashMap, env, path::PathBuf};
 
-use egui::{pos2, Color32, ColorImage, Pos2, Rect, Sense};
+use egui::{pos2, reset_button, Color32, ColorImage, Pos2, Rect, Sense};
 use tes3::esp::{Landscape, Plugin};
 
 use crate::{
     color_map_to_pixels, create_image, get_plugins_sorted, height_map_to_pixel_heights, Dimensions,
-    UiData, ZoomData, VERTEX_CNT,
+    SavedUiData, ZoomData, VERTEX_CNT,
 };
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -31,17 +31,14 @@ pub struct TemplateApp {
     #[serde(skip)]
     foreground: Option<egui::TextureHandle>,
 
-    // ui
-    ui_data: UiData,
-
     #[serde(skip)]
     info: String,
 
-    #[serde(skip)]
-    zoom_data: ZoomData,
+    // ui
+    ui_data: SavedUiData,
 
     #[serde(skip)]
-    zinfo: String,
+    zoom_data: ZoomData,
 }
 
 impl TemplateApp {
@@ -281,6 +278,86 @@ impl TemplateApp {
         self.zoom_data.drag_offset = Pos2::default();
         self.zoom_data.drag_start = Pos2::default();
     }
+
+    /// Settings popup menu
+    pub(crate) fn options_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            reset_button(ui, &mut self.ui_data);
+
+            if ui.button("Refresh image").clicked() {
+                let img = create_image(&self.heights, self.dimensions, self.ui_data);
+
+                let mut img2 = ColorImage::new(self.dimensions.size(), Color32::WHITE);
+                self.color_pixels_reload();
+                img2.pixels = self.pixel_color.clone();
+
+                self.background =
+                    Some(ui.ctx().load_texture("background", img, Default::default()));
+                self.foreground = Some(ui.ctx().load_texture(
+                    "foreground",
+                    img2,
+                    Default::default(),
+                ));
+            }
+        });
+
+        ui.separator();
+        ui.label("Overlays");
+        ui.checkbox(&mut self.ui_data.overlay_terrain, "Show terrain map");
+        ui.checkbox(&mut self.ui_data.overlay_paths, "Show overlay map");
+        ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");
+
+        ui.label("Color");
+        ui.add(egui::Slider::new(&mut self.ui_data.alpha, 0..=255).text("Alpha"));
+
+        ui.color_edit_button_srgba(&mut self.ui_data.height_base);
+        ui.add(
+            egui::Slider::new(&mut self.ui_data.height_spectrum, -360..=360).text("Height offset"),
+        );
+
+        ui.color_edit_button_srgba(&mut self.ui_data.depth_base);
+        ui.add(
+            egui::Slider::new(&mut self.ui_data.depth_spectrum, -360..=360).text("Depth offset"),
+        );
+    }
+
+    fn open_folder(&mut self, ctx: &egui::Context) {
+        let folder_option = rfd::FileDialog::new()
+            .add_filter("esm", &["esm"])
+            .add_filter("esp", &["esp"])
+            .pick_folder();
+
+        if let Some(path) = folder_option {
+            self.load_folder(&path, ctx);
+        }
+    }
+
+    fn open_plugin(&mut self, ctx: &egui::Context) {
+        let file_option = rfd::FileDialog::new()
+            .add_filter("esm", &["esm"])
+            .add_filter("esp", &["esp"])
+            .pick_file();
+
+        if let Some(path) = file_option {
+            let mut plugin = Plugin::new();
+            if plugin.load_path(&path).is_ok() {
+                let mut records: HashMap<(i32, i32), Landscape> = HashMap::default();
+                for r in plugin.into_objects_of_type::<Landscape>() {
+                    let key = r.grid;
+                    records.insert(key, r);
+                }
+                if let Some((back, fore)) = self.load_data(&records) {
+                    let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
+                        ctx.load_texture("background", back, Default::default())
+                    });
+
+                    let _: &egui::TextureHandle = self.foreground.get_or_insert_with(|| {
+                        ctx.load_texture("foreground", fore, Default::default())
+                    });
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for TemplateApp {
@@ -304,47 +381,12 @@ impl eframe::App for TemplateApp {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("Load folder").clicked() {
-                        let folder_option = rfd::FileDialog::new()
-                            .add_filter("esm", &["esm"])
-                            .add_filter("esp", &["esp"])
-                            .pick_folder();
-
-                        if let Some(path) = folder_option {
-                            self.load_folder(&path, ctx);
-                        }
-
+                        self.open_folder(ctx);
                         ui.close_menu();
                     }
 
                     if ui.button("Load plugin").clicked() {
-                        let file_option = rfd::FileDialog::new()
-                            .add_filter("esm", &["esm"])
-                            .add_filter("esp", &["esp"])
-                            .pick_file();
-
-                        if let Some(path) = file_option {
-                            let mut plugin = Plugin::new();
-                            if plugin.load_path(&path).is_ok() {
-                                let mut records: HashMap<(i32, i32), Landscape> =
-                                    HashMap::default();
-                                for r in plugin.into_objects_of_type::<Landscape>() {
-                                    let key = r.grid;
-                                    records.insert(key, r);
-                                }
-                                if let Some((back, fore)) = self.load_data(&records) {
-                                    let _: &egui::TextureHandle =
-                                        self.background.get_or_insert_with(|| {
-                                            ctx.load_texture("background", back, Default::default())
-                                        });
-
-                                    let _: &egui::TextureHandle =
-                                        self.foreground.get_or_insert_with(|| {
-                                            ctx.load_texture("foreground", fore, Default::default())
-                                        });
-                                }
-                            }
-                        }
-
+                        self.open_plugin(ctx);
                         ui.close_menu();
                     }
 
@@ -376,59 +418,37 @@ impl eframe::App for TemplateApp {
                 self.dimensions.min_z,
                 self.dimensions.max_z
             ));
-            ui.horizontal(|ui| {
-                ui.label("Info: ");
-                ui.label(&self.info);
-                ui.separator();
-                ui.label(&self.zinfo);
-            });
-            // toolbar
-            ui.horizontal(|ui| {
-                //ui.add(egui::Slider::new(&mut self.zoom_data.zoom2, 0..=100).text("Zoom"));
-
-                ui.separator();
-
-                ui.add(egui::Slider::new(&mut self.ui_data.alpha, 0..=255).text("Alpha"));
-
-                ui.color_edit_button_srgba(&mut self.ui_data.height_base);
-                ui.add(
-                    egui::Slider::new(&mut self.ui_data.height_spectrum, -360..=360)
-                        .text("Height offset"),
-                );
-
-                ui.color_edit_button_srgba(&mut self.ui_data.depth_base);
-                ui.add(
-                    egui::Slider::new(&mut self.ui_data.depth_spectrum, -360..=360)
-                        .text("Depth offset"),
-                );
-
-                if ui.button("Default").clicked() {
-                    self.ui_data = UiData::default();
-                }
-                if ui.button("Reload").clicked() {
-                    let img = create_image(&self.heights, self.dimensions, self.ui_data);
-
-                    let mut img2 = ColorImage::new(self.dimensions.size(), Color32::WHITE);
-                    self.color_pixels_reload();
-                    img2.pixels = self.pixel_color.clone();
-
-                    self.background =
-                        Some(ui.ctx().load_texture("background", img, Default::default()));
-                    self.foreground = Some(ui.ctx().load_texture(
-                        "foreground",
-                        img2,
-                        Default::default(),
-                    ));
-                }
-            });
 
             ui.separator();
 
             if self.heights.is_empty() {
+                // Default UI
+                ui.horizontal(|ui| {
+                    if ui.button("Load plugin").clicked() {
+                        self.open_plugin(ctx);
+                    }
+
+                    if ui.button("Load folder").clicked() {
+                        self.open_folder(ctx);
+                    }
+                });
+
+                // settings
+                egui::Frame::popup(ui.style())
+                    .stroke(egui::Stroke::NONE)
+                    .show(ui, |ui| {
+                        ui.set_max_width(170.0);
+                        egui::CollapsingHeader::new("Settings").show(ui, |ui| self.options_ui(ui));
+                    });
+
                 return;
             }
 
             // painter
+            // let clip_rect = ui.available_rect_before_wrap();
+            // let painter = egui::Painter::new(ui.ctx().clone(), ui.layer_id(), clip_rect);
+            // let response = painter.ctx();
+
             let (response, painter) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::click_and_drag());
 
@@ -442,10 +462,9 @@ impl eframe::App for TemplateApp {
                 let r = z - 1.0;
                 self.zoom_data.zoom += r;
 
-                // TODO
+                // TODO offset the image for smooth zoom
                 if let Some(pointer_pos) = response.hover_pos() {
                     let d = pointer_pos * r;
-
                     self.zoom_data.drag_offset -= d.to_vec2();
                 }
             }
@@ -466,13 +485,19 @@ impl eframe::App for TemplateApp {
             let to_screen = egui::emath::RectTransform::from_to(from, to);
             let from_screen = to_screen.inverse();
 
-            // paint
-            if let Some(texture) = &self.background {
-                painter.image(texture.into(), canvas, uv, Color32::WHITE);
+            // paint maps
+            if self.ui_data.overlay_terrain {
+                if let Some(texture) = &self.background {
+                    painter.image(texture.into(), canvas, uv, Color32::WHITE);
+                }
             }
-            if let Some(texture) = &self.foreground {
-                painter.image(texture.into(), canvas, uv, Color32::WHITE);
+            if self.ui_data.overlay_paths {
+                if let Some(texture) = &self.foreground {
+                    painter.image(texture.into(), canvas, uv, Color32::WHITE);
+                }
             }
+
+            // Responses
 
             // hover
             if let Some(pointer_pos) = response.hover_pos() {
@@ -491,7 +516,14 @@ impl eframe::App for TemplateApp {
                     let cy = self.dimensions.tranform_to_cell_y(y as i32);
                     self.info = format!("({}, {}), height: {}", cx, cy, value);
                 }
+
+                if self.ui_data.show_tooltips {
+                    egui::show_tooltip(ui.ctx(), egui::Id::new("my_tooltip"), |ui| {
+                        ui.label(self.info.clone());
+                    });
+                }
             }
+
             // panning
             if response.drag_started() {
                 if let Some(drag_start) = response.interact_pointer_pos() {
@@ -504,16 +536,32 @@ impl eframe::App for TemplateApp {
                     self.zoom_data.drag_start = current_pos;
                 }
             }
+
             // zoom
             let delta = ctx.input(|i| i.zoom_delta());
+            // let delta = response.input(|i| i.zoom_delta());
             if delta != 1.0 {
                 self.zoom_data.zoom_delta = Some(delta);
             }
-
             if response.middle_clicked() {
                 self.reset_zoom();
                 self.reset_pan();
             }
+
+            // Make sure we allocate what we used (everything)
+            ui.expand_to_include_rect(painter.clip_rect());
+
+            // settings
+            // TODO dumb hack
+            let settings_rect = egui::Rect::from_min_max(response.rect.min, pos2(0.0, 0.0));
+            ui.put(settings_rect, egui::Label::new(""));
+
+            egui::Frame::popup(ui.style())
+                .stroke(egui::Stroke::NONE)
+                .show(ui, |ui| {
+                    ui.set_max_width(270.0);
+                    egui::CollapsingHeader::new("Settings ").show(ui, |ui| self.options_ui(ui));
+                });
         });
     }
 }
