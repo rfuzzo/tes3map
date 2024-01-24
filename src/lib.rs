@@ -12,9 +12,11 @@ use egui::{Color32, ColorImage, Pos2};
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
-const TEXTURE_SIZE: usize = 256;
-const GRID_SIZE: usize = 16;
-const TEXTURE_GRID: usize = TEXTURE_SIZE * GRID_SIZE;
+const TEXTURE_SIZE: usize = 256; //256;
+const GRID_SIZE: usize = 2;
+
+const CELL_SIZE: usize = TEXTURE_SIZE * GRID_SIZE;
+
 const VERTEX_CNT: usize = 65;
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
 

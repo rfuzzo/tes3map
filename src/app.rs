@@ -26,6 +26,8 @@ pub struct TemplateApp {
     landscape_records: HashMap<(i32, i32), Landscape>,
     #[serde(skip)]
     texture_records: HashMap<u32, LandscapeTexture>,
+    #[serde(skip)]
+    texture_map: HashMap<u32, Vec<u8>>,
 
     // painting
     #[serde(skip)]
@@ -232,8 +234,8 @@ impl TemplateApp {
         } else {
             ColorImage::new(
                 [
-                    self.dimensions.width_cells() as usize * TEXTURE_GRID as usize,
-                    self.dimensions.height_cells() as usize * TEXTURE_GRID as usize,
+                    self.dimensions.width_cells() as usize * CELL_SIZE as usize,
+                    self.dimensions.height_cells() as usize * CELL_SIZE as usize,
                 ],
                 Color32::GOLD,
             )
@@ -467,9 +469,9 @@ impl TemplateApp {
         };
 
         let d = self.dimensions;
-        let stride = d.width_cells() * TEXTURE_GRID;
-        let size = d.width_cells() * TEXTURE_GRID * d.height_cells() * TEXTURE_GRID;
-        let mut pixels_color = vec![Color32::BLUE; size as usize];
+        let stride = d.width_cells() * CELL_SIZE;
+        let size = stride * d.height_cells() * CELL_SIZE;
+        let mut pixels_color = vec![Color32::TRANSPARENT; size as usize];
 
         for cy in d.min_y..d.max_y + 1 {
             for cx in d.min_x..d.max_x + 1 {
@@ -522,20 +524,19 @@ impl TemplateApp {
                                 let pixels = color_image.pixels;
 
                                 // assign pixel
-
                                 for y in 0..TEXTURE_SIZE {
                                     for x in 0..TEXTURE_SIZE {
-                                        let tx = d.tranform_to_canvas_x(cx) * TEXTURE_GRID
-                                            + gx * GRID_SIZE
+                                        let tx = d.tranform_to_canvas_x(cx) * CELL_SIZE
+                                            + gx * TEXTURE_SIZE
                                             + x;
-                                        let ty = d.tranform_to_canvas_y(cy) * TEXTURE_GRID
-                                            + gy * GRID_SIZE
+                                        let ty = d.tranform_to_canvas_y(cy) * CELL_SIZE
+                                            + gy * TEXTURE_SIZE
                                             + y;
-
-                                        let i = (ty * stride) + tx;
 
                                         let index = (y * TEXTURE_SIZE) + x;
                                         let color = pixels[index as usize];
+
+                                        let i = (ty * stride) + tx;
                                         pixels_color[i as usize] = color;
                                     }
                                 }
@@ -544,15 +545,15 @@ impl TemplateApp {
                     }
                 } else {
                     // no landscape
-                    for gy in 0..GRID_SIZE {
-                        for gx in 0..GRID_SIZE {
-                            for y in 0..TEXTURE_GRID {
-                                for x in 0..TEXTURE_GRID {
-                                    let tx = d.tranform_to_canvas_x(cx) * TEXTURE_GRID
-                                        + gx * GRID_SIZE
+                    for gx in 0..GRID_SIZE {
+                        for gy in 0..GRID_SIZE {
+                            for x in 0..TEXTURE_SIZE {
+                                for y in 0..TEXTURE_SIZE {
+                                    let tx = d.tranform_to_canvas_x(cx) * CELL_SIZE
+                                        + gx * TEXTURE_SIZE
                                         + x;
-                                    let ty = d.tranform_to_canvas_y(cy) * TEXTURE_GRID
-                                        + gy * GRID_SIZE
+                                    let ty = d.tranform_to_canvas_y(cy) * CELL_SIZE
+                                        + gy * TEXTURE_SIZE
                                         + y;
 
                                     let i = (ty * stride) + tx;
@@ -568,8 +569,8 @@ impl TemplateApp {
 
         let mut img = ColorImage::new(
             [
-                d.width_cells() as usize * TEXTURE_GRID as usize,
-                d.height_cells() as usize * TEXTURE_GRID as usize,
+                d.width_cells() as usize * CELL_SIZE as usize,
+                d.height_cells() as usize * CELL_SIZE as usize,
             ],
             Color32::GOLD,
         );
