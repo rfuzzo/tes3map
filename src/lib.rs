@@ -12,9 +12,10 @@ use egui::{Color32, ColorImage, Pos2};
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
-const TEXTURE_GRID: i32 = 256;
+const TEXTURE_SIZE: usize = 256;
+const GRID_SIZE: usize = 16;
+const TEXTURE_GRID: usize = TEXTURE_SIZE * GRID_SIZE;
 const VERTEX_CNT: usize = 65;
-//const DEFAULT_COLOR: Color32 = Color32::from_rgb(34, 0, 204);
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -65,18 +66,18 @@ pub struct Dimensions {
 }
 
 impl Dimensions {
-    fn width_cells(&self) -> i32 {
-        1 + self.max_x - self.min_x
+    fn width_cells(&self) -> usize {
+        (1 + self.max_x - self.min_x).max(0) as usize
     }
-    fn height_cells(&self) -> i32 {
-        1 + self.max_y - self.min_y
+    fn height_cells(&self) -> usize {
+        (1 + self.max_y - self.min_y).max(0) as usize
     }
 
-    fn width(&self) -> i32 {
-        (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32)
+    fn width(&self) -> usize {
+        (1 + self.max_x - self.min_x).max(0) as usize * (VERTEX_CNT)
     }
-    fn height(&self) -> i32 {
-        (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32)
+    fn height(&self) -> usize {
+        (1 + self.max_y - self.min_y).max(0) as usize * (VERTEX_CNT)
     }
     fn size(&self) -> [usize; 2] {
         [self.width() as usize, self.height() as usize]
@@ -90,12 +91,12 @@ impl Dimensions {
         self.max_y - y
     }
 
-    fn tranform_to_canvas_x(&self, x: i32) -> i32 {
-        x - self.min_x
+    fn tranform_to_canvas_x(&self, x: i32) -> usize {
+        (x - self.min_x).max(0) as usize
     }
 
-    fn tranform_to_canvas_y(&self, y: i32) -> i32 {
-        self.max_y - y
+    fn tranform_to_canvas_y(&self, y: i32) -> usize {
+        (self.max_y - y).max(0) as usize
     }
 }
 
@@ -255,14 +256,14 @@ fn color_map_to_pixels(
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
-            let tx = VERTEX_CNT as i32 * dimensions.tranform_to_canvas_x(cx);
-            let ty = VERTEX_CNT as i32 * dimensions.tranform_to_canvas_y(cy);
+            let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx);
+            let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy);
 
             if let Some(colors) = color_map.get(&(cx, cy)) {
                 for (y, row) in colors.iter().rev().enumerate() {
                     for (x, value) in row.iter().enumerate() {
-                        let tx = tx + x as i32;
-                        let ty = ty + y as i32;
+                        let tx = tx + x;
+                        let ty = ty + y;
 
                         let i = (ty * nx) + tx;
                         pixels_color[i as usize] = *value;
@@ -271,8 +272,8 @@ fn color_map_to_pixels(
             } else {
                 for y in 0..VERTEX_CNT {
                     for x in 0..VERTEX_CNT {
-                        let tx = tx + x as i32;
-                        let ty = ty + y as i32;
+                        let tx = tx + x;
+                        let ty = ty + y;
 
                         let i = (ty * nx) + tx;
 
@@ -304,15 +305,15 @@ fn height_map_to_pixel_heights(
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
-            let tx = VERTEX_CNT as i32 * dimensions.tranform_to_canvas_x(cx);
-            let ty = VERTEX_CNT as i32 * dimensions.tranform_to_canvas_y(cy);
+            let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx);
+            let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy);
 
             if let Some(heights) = heights_map.get(&(cx, cy)) {
                 // look up heightmap
                 for (y, row) in heights.iter().rev().enumerate() {
                     for (x, value) in row.iter().enumerate() {
-                        let tx = tx + x as i32;
-                        let ty = ty + y as i32;
+                        let tx = tx + x;
+                        let ty = ty + y;
 
                         let i = (ty * nx) + tx;
 
@@ -322,8 +323,8 @@ fn height_map_to_pixel_heights(
             } else {
                 for y in 0..VERTEX_CNT {
                     for x in 0..VERTEX_CNT {
-                        let tx = tx + x as i32;
-                        let ty = ty + y as i32;
+                        let tx = tx + x;
+                        let ty = ty + y;
 
                         let i = (ty * nx) + tx;
 

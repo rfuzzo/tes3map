@@ -1,7 +1,15 @@
-use std::{collections::HashMap, env, path::PathBuf};
+use std::{
+    collections::HashMap,
+    env,
+    io::{Error, ErrorKind},
+    path::PathBuf,
+};
 
 use egui::{pos2, reset_button, Color32, ColorImage, Pos2, Rect, Sense};
-use image::{DynamicImage, RgbaImage};
+use image::{
+    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
+    DynamicImage, ImageError, RgbaImage,
+};
 use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture, Plugin};
 
 use crate::*;
@@ -33,6 +41,8 @@ pub struct TemplateApp {
     #[serde(skip)]
     textured: Option<egui::TextureHandle>,
 
+    #[serde(skip)]
+    data_files: Option<PathBuf>,
     #[serde(skip)]
     info: String,
 
@@ -217,13 +227,17 @@ impl TemplateApp {
         let mut img2 = ColorImage::new(dimensions.size(), Color32::WHITE);
         img2.pixels = self.pixel_color.clone();
 
-        let img3 = self.get_textured_pixels().expect("textures");
-
-        // dbg
-        // let j = serde_json::to_string(&texture_map).expect("serialize");
-        // let mut file = File::create("textures.json").expect("Unable to create file");
-        // file.write_all(j.as_bytes())
-        //     .expect("Unable to write to file");
+        let img3 = if let Ok(i) = self.get_textured_pixels() {
+            i
+        } else {
+            ColorImage::new(
+                [
+                    self.dimensions.width_cells() as usize * TEXTURE_GRID as usize,
+                    self.dimensions.height_cells() as usize * TEXTURE_GRID as usize,
+                ],
+                Color32::GOLD,
+            )
+        };
 
         Some((img, img2, img3))
     }
@@ -382,6 +396,7 @@ impl TemplateApp {
             .pick_folder();
 
         if let Some(path) = folder_option {
+            self.data_files = Some(path.clone());
             self.load_folder(&path, ctx);
         }
     }
@@ -393,6 +408,8 @@ impl TemplateApp {
             .pick_file();
 
         if let Some(path) = file_option {
+            self.data_files = Some(path.clone());
+
             let mut plugin = Plugin::new();
             if plugin.load_path(&path).is_ok() {
                 let mut records: HashMap<(i32, i32), Landscape> = HashMap::default();
@@ -443,16 +460,19 @@ impl TemplateApp {
     }
 
     fn get_textured_pixels(&self) -> std::io::Result<ColorImage> {
+        let data_files = if let Some(d) = &self.data_files {
+            d
+        } else {
+            return Err(Error::from(ErrorKind::NotFound));
+        };
+
         let d = self.dimensions;
-        let size = d.width_cells() * d.height_cells() * TEXTURE_GRID * TEXTURE_GRID;
+        let stride = d.width_cells() * TEXTURE_GRID;
+        let size = d.width_cells() * TEXTURE_GRID * d.height_cells() * TEXTURE_GRID;
         let mut pixels_color = vec![Color32::BLUE; size as usize];
-        let nx = d.width_cells() * TEXTURE_GRID;
 
         for cy in d.min_y..d.max_y + 1 {
             for cx in d.min_x..d.max_x + 1 {
-                let tx = d.tranform_to_canvas_x(cx) * TEXTURE_GRID;
-                let ty = d.tranform_to_canvas_y(cy) * TEXTURE_GRID;
-
                 if let Some(landscape) = self.landscape_records.get(&(cx, cy)) {
                     if landscape
                         .landscape_flags
@@ -460,53 +480,61 @@ impl TemplateApp {
                     {
                         // each tile is subdivided into a 16x16 grid
                         let data = &landscape.texture_indices.data;
-                        let mut indices: Vec<String> = vec![];
-                        for y in 0..16 {
-                            for x in 0..16 {
-                                let key = data[y][x] as u32;
-                                if let Some(tex) = self.texture_records.get(&key) {
-                                    //println!("{x},{y}: {}", tex.file_name);
-                                    indices.push(tex.file_name.to_owned());
-                                } else {
-                                    indices.push("None".to_owned());
+                        for gy in 0..GRID_SIZE {
+                            for gx in 0..GRID_SIZE {
+                                // for each sub-grid get the texture
+
+                                let key = data[gy as usize][gx as usize] as u32;
+                                let Some(tex) = self.texture_records.get(&key) else {
+                                    continue;
+                                };
+                                let tex_path = PathBuf::from(data_files)
+                                    .join("Textures")
+                                    .join(&tex.file_name);
+                                if !tex_path.exists() {
+                                    continue;
                                 }
-                            }
-                        }
 
-                        // just get the first for now
-                        let tex_path =
-                            PathBuf::from("D:\\games\\Morrowind2\\Data Files\\Textures\\")
-                                .join(&indices[0]);
-                        if tex_path.exists() {
-                            let mut reader = image::io::Reader::open(&tex_path).expect("open");
-                            let ext = tex_path.extension().unwrap().to_string_lossy();
-                            if ext.contains("tga") {
-                                reader.set_format(image::ImageFormat::Tga);
-                                continue;
-                            } else if ext.contains("dds") {
-                                reader.set_format(image::ImageFormat::Dds);
-                            } else {
-                                // do nothing
-                            }
+                                // decode image
+                                let mut reader = image::io::Reader::open(&tex_path)?;
+                                let ext = tex_path.extension().unwrap().to_string_lossy();
+                                if ext.contains("tga") {
+                                    reader.set_format(image::ImageFormat::Tga);
+                                    continue;
+                                } else if ext.contains("dds") {
+                                    reader.set_format(image::ImageFormat::Dds);
+                                } else {
+                                    // do nothing
+                                    continue;
+                                }
 
-                            if let Ok(image) = reader.decode() {
-                                // convert?
+                                let Ok(image) = reader.decode() else { continue };
                                 let image_buffer = image.to_rgba8();
                                 let pixels = image_buffer.as_flat_samples();
                                 let size = [image.width() as _, image.height() as _];
+
+                                if size != [TEXTURE_SIZE as usize, TEXTURE_SIZE as usize] {
+                                    continue;
+                                }
                                 let color_image =
                                     ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
 
                                 let pixels = color_image.pixels;
 
-                                for y in 0..TEXTURE_GRID {
-                                    for x in 0..TEXTURE_GRID {
-                                        let tx = tx + x as i32;
-                                        let ty = ty + y as i32;
+                                // assign pixel
 
-                                        let i = (ty * nx) + tx;
+                                for y in 0..TEXTURE_SIZE {
+                                    for x in 0..TEXTURE_SIZE {
+                                        let tx = d.tranform_to_canvas_x(cx) * TEXTURE_GRID
+                                            + gx * GRID_SIZE
+                                            + x;
+                                        let ty = d.tranform_to_canvas_y(cy) * TEXTURE_GRID
+                                            + gy * GRID_SIZE
+                                            + y;
 
-                                        let index = (y * TEXTURE_GRID) + x;
+                                        let i = (ty * stride) + tx;
+
+                                        let index = (y * TEXTURE_SIZE) + x;
                                         let color = pixels[index as usize];
                                         pixels_color[i as usize] = color;
                                     }
@@ -516,14 +544,22 @@ impl TemplateApp {
                     }
                 } else {
                     // no landscape
-                    for y in 0..TEXTURE_GRID {
-                        for x in 0..TEXTURE_GRID {
-                            let tx = tx + x;
-                            let ty = ty + y;
+                    for gy in 0..GRID_SIZE {
+                        for gx in 0..GRID_SIZE {
+                            for y in 0..TEXTURE_GRID {
+                                for x in 0..TEXTURE_GRID {
+                                    let tx = d.tranform_to_canvas_x(cx) * TEXTURE_GRID
+                                        + gx * GRID_SIZE
+                                        + x;
+                                    let ty = d.tranform_to_canvas_y(cy) * TEXTURE_GRID
+                                        + gy * GRID_SIZE
+                                        + y;
 
-                            let i = (ty * nx) + tx;
+                                    let i = (ty * stride) + tx;
 
-                            pixels_color[i as usize] = Color32::BLACK;
+                                    pixels_color[i as usize] = Color32::BLACK;
+                                }
+                            }
                         }
                     }
                 }
@@ -693,8 +729,8 @@ impl eframe::App for TemplateApp {
             if let Some(pointer_pos) = response.hover_pos() {
                 let canvas_pos = from_screen * pointer_pos;
 
-                let canvas_pos_x = canvas_pos.x as i32;
-                let canvas_pos_y = canvas_pos.y as i32;
+                let canvas_pos_x = canvas_pos.x as usize;
+                let canvas_pos_y = canvas_pos.y as usize;
                 let i = ((canvas_pos_y * self.dimensions.width()) + canvas_pos_x) as usize;
 
                 if i < self.heights.len() {
@@ -839,22 +875,26 @@ fn save_image(
     path: PathBuf,
     color_image: &ColorImage,
     dimensions: Dimensions,
-) -> Result<DynamicImage, image::ImageError> {
+) -> Result<(), image::ImageError> {
     // get image
 
     let pixels = color_image.as_raw();
 
     // Create an RgbaImage from the raw pixel data
-    let img = RgbaImage::from_raw(
+    if let Some(img) = RgbaImage::from_raw(
         dimensions.width() as u32,
         dimensions.height() as u32,
         pixels.to_vec(),
-    )
-    .expect("Failed to create image");
-
-    // Convert the RgbaImage to a DynamicImage (required for saving as PNG)
-    let dynamic_img = DynamicImage::ImageRgba8(img);
-    dynamic_img.save(path)?;
-
-    Ok(dynamic_img)
+    ) {
+        // Convert the RgbaImage to a DynamicImage (required for saving as PNG)
+        let dynamic_img = DynamicImage::ImageRgba8(img);
+        dynamic_img.save(path)?;
+        Ok(())
+    } else {
+        let e = ImageError::Unsupported(UnsupportedError::from_format_and_kind(
+            ImageFormatHint::Name("".to_owned()),
+            UnsupportedErrorKind::GenericFeature("".to_owned()),
+        ));
+        Err(e)
+    }
 }
