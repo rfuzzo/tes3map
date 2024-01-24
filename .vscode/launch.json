@@ -20,8 +20,8 @@
                 }
             },
             "args": [],
-            // /"cwd": "${workspaceFolder}"
-            "cwd": "D:\\games\\_test"
+            "cwd": "${workspaceFolder}"
+            //"cwd": "D:\\games\\_test"
         },
     ]
 }

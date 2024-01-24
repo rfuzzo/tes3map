@@ -12,8 +12,8 @@ use egui::{Color32, ColorImage, Pos2};
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
-const TEXTURE_SIZE: usize = 256; //256;
-const GRID_SIZE: usize = 2;
+const TEXTURE_SIZE: usize = 2; //256;
+const GRID_SIZE: usize = 16; //16
 
 const CELL_SIZE: usize = TEXTURE_SIZE * GRID_SIZE;
 
@@ -68,21 +68,25 @@ pub struct Dimensions {
 }
 
 impl Dimensions {
-    fn width_cells(&self) -> usize {
+    fn width(&self) -> usize {
         (1 + self.max_x - self.min_x).max(0) as usize
     }
-    fn height_cells(&self) -> usize {
+    fn height(&self) -> usize {
         (1 + self.max_y - self.min_y).max(0) as usize
     }
+    fn size(&self) -> usize {
+        self.width() * self.height()
+    }
 
-    fn width(&self) -> usize {
-        (1 + self.max_x - self.min_x).max(0) as usize * (VERTEX_CNT)
+    fn pixel_size(&self, pixel_per_cell: usize) -> usize {
+        self.size() * pixel_per_cell * pixel_per_cell
     }
-    fn height(&self) -> usize {
-        (1 + self.max_y - self.min_y).max(0) as usize * (VERTEX_CNT)
-    }
-    fn size(&self) -> [usize; 2] {
-        [self.width() as usize, self.height() as usize]
+
+    fn pixel_size_tuple(&self, pixel_per_cell: usize) -> [usize; 2] {
+        [
+            self.width() * pixel_per_cell,
+            self.height() * pixel_per_cell,
+        ]
     }
 
     fn tranform_to_cell_x(&self, x: i32) -> i32 {
@@ -251,8 +255,8 @@ fn color_map_to_pixels(
     let max_y = dimensions.max_y;
     let min_y = dimensions.min_y;
 
-    let nx = dimensions.width();
-    let ny = dimensions.height();
+    let nx = dimensions.width() * VERTEX_CNT;
+    let ny = dimensions.height() * VERTEX_CNT;
     let size = nx as usize * ny as usize;
     let mut pixels_color = vec![Color32::WHITE; size];
 
@@ -299,37 +303,32 @@ fn height_map_to_pixel_heights(
     let max_y = dimensions.max_y;
     let min_y = dimensions.min_y;
 
-    let nx = dimensions.width();
-    let ny = dimensions.height();
-    let size = nx as usize * ny as usize;
+    let size = dimensions.pixel_size(VERTEX_CNT);
     // TODO hack to paint unset tiles
     let mut pixels = vec![dimensions.min_z - 1.0; size];
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
-            let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx);
-            let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy);
-
             if let Some(heights) = heights_map.get(&(cx, cy)) {
                 // look up heightmap
                 for (y, row) in heights.iter().rev().enumerate() {
                     for (x, value) in row.iter().enumerate() {
-                        let tx = tx + x;
-                        let ty = ty + y;
+                        let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
+                        let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
 
-                        let i = (ty * nx) + tx;
-
+                        let stride = dimensions.width() * VERTEX_CNT;
+                        let i = (ty * stride) + tx;
                         pixels[i as usize] = *value;
                     }
                 }
             } else {
                 for y in 0..VERTEX_CNT {
                     for x in 0..VERTEX_CNT {
-                        let tx = tx + x;
-                        let ty = ty + y;
+                        let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
+                        let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
 
-                        let i = (ty * nx) + tx;
-
+                        let stride = dimensions.width() * VERTEX_CNT;
+                        let i = (ty * stride) + tx;
                         pixels[i as usize] = dimensions.min_z - 1.0;
                     }
                 }
@@ -340,8 +339,13 @@ fn height_map_to_pixel_heights(
     pixels
 }
 
-fn create_image(pixels: &[f32], dimensions: Dimensions, ui_data: SavedUiData) -> ColorImage {
-    let mut img = ColorImage::new(dimensions.size(), Color32::WHITE);
+fn create_image(
+    pixels: &[f32],
+    size: [usize; 2],
+    dimensions: Dimensions,
+    ui_data: SavedUiData,
+) -> ColorImage {
+    let mut img = ColorImage::new(size, Color32::WHITE);
     let p = pixels
         .iter()
         .map(|f| get_color_for_height(*f, dimensions, ui_data))
