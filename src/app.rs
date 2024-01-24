@@ -1,12 +1,10 @@
 use std::{collections::HashMap, env, path::PathBuf};
 
 use egui::{pos2, reset_button, Color32, ColorImage, Pos2, Rect, Sense};
+use image::{DynamicImage, RgbaImage};
 use tes3::esp::{Landscape, Plugin};
 
-use crate::{
-    color_map_to_pixels, create_image, get_plugins_sorted, height_map_to_pixel_heights, Dimensions,
-    SavedUiData, ZoomData, VERTEX_CNT,
-};
+use crate::*;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(Default, serde::Deserialize, serde::Serialize)]
@@ -285,12 +283,10 @@ impl TemplateApp {
             reset_button(ui, &mut self.ui_data);
 
             if ui.button("Refresh image").clicked() {
-                let img = create_image(&self.heights, self.dimensions, self.ui_data);
+                let img = self.get_background();
+                let img2 = self.get_foreground();
 
-                let mut img2 = ColorImage::new(self.dimensions.size(), Color32::WHITE);
-                self.color_pixels_reload();
-                img2.pixels = self.pixel_color.clone();
-
+                // set handles
                 self.background =
                     Some(ui.ctx().load_texture("background", img, Default::default()));
                 self.foreground = Some(ui.ctx().load_texture(
@@ -319,6 +315,17 @@ impl TemplateApp {
         ui.add(
             egui::Slider::new(&mut self.ui_data.depth_spectrum, -360..=360).text("Depth offset"),
         );
+    }
+
+    fn get_background(&mut self) -> ColorImage {
+        create_image(&self.heights, self.dimensions, self.ui_data)
+    }
+
+    fn get_foreground(&mut self) -> ColorImage {
+        let mut img2 = ColorImage::new(self.dimensions.size(), Color32::WHITE);
+        self.color_pixels_reload();
+        img2.pixels = self.pixel_color.clone();
+        img2
     }
 
     fn open_folder(&mut self, ctx: &egui::Context) {
@@ -357,6 +364,22 @@ impl TemplateApp {
                 }
             }
         }
+    }
+
+    fn get_layered_image(&mut self, img: ColorImage, img2: ColorImage) -> ColorImage {
+        let mut layered = img.pixels.clone();
+        for (i, color1) in img.pixels.iter().enumerate() {
+            let color2 = img2.pixels[i];
+            let rgb1 = (color1.r(), color1.g(), color1.b());
+            let rgb2 = (color2.r(), color2.g(), color2.b());
+            let a1 = color1.a() as f32 / 255.0;
+            let a2 = color2.a() as f32 / 255.0;
+            let f = overlay_colors(rgb1, a1, rgb2, a2);
+            layered[i] = Color32::from_rgb(f.0, f.1, f.2);
+        }
+        let mut layered_img = ColorImage::new(self.dimensions.size(), Color32::TRANSPARENT);
+        layered_img.pixels = layered;
+        layered_img
     }
 }
 
@@ -480,7 +503,10 @@ impl eframe::App for TemplateApp {
             let to = canvas;
             let from = egui::Rect::from_min_max(
                 pos2(0.0, 0.0),
-                pos2(self.dimensions.nx() as f32, self.dimensions.ny() as f32),
+                pos2(
+                    self.dimensions.width() as f32,
+                    self.dimensions.height() as f32,
+                ),
             );
             let to_screen = egui::emath::RectTransform::from_to(from, to);
             let from_screen = to_screen.inverse();
@@ -505,7 +531,7 @@ impl eframe::App for TemplateApp {
 
                 let canvas_pos_x = canvas_pos.x as i32;
                 let canvas_pos_y = canvas_pos.y as i32;
-                let i = ((canvas_pos_y * self.dimensions.nx()) + canvas_pos_x) as usize;
+                let i = ((canvas_pos_y * self.dimensions.width()) + canvas_pos_x) as usize;
 
                 if i < self.heights.len() {
                     let value = self.heights[i];
@@ -562,6 +588,108 @@ impl eframe::App for TemplateApp {
                     ui.set_max_width(270.0);
                     egui::CollapsingHeader::new("Settings ").show(ui, |ui| self.options_ui(ui));
                 });
+
+            response.context_menu(|ui| {
+                if ui.button("Save as image").clicked() {
+                    let file_option = rfd::FileDialog::new()
+                        .add_filter("png", &["png"])
+                        .save_file();
+
+                    if let Some(original_path) = file_option {
+                        // combined
+                        let img = self.get_background();
+                        let img2 = self.get_foreground();
+                        let layered_img = self.get_layered_image(img, img2);
+                        match save_image(original_path, &layered_img, self.dimensions) {
+                            Ok(_) => {}
+                            Err(e) => println!("{}", e),
+                        }
+                    }
+
+                    ui.close_menu();
+                }
+
+                if ui.button("Save as layers").clicked() {
+                    let file_option = rfd::FileDialog::new()
+                        .add_filter("png", &["png"])
+                        .save_file();
+
+                    if let Some(original_path) = file_option {
+                        // save layers
+                        let img = self.get_background();
+                        let mut new_path = append_number_to_filename(&original_path, 1);
+                        match save_image(new_path, &img, self.dimensions) {
+                            Ok(_) => {}
+                            Err(e) => println!("{}", e),
+                        }
+
+                        let img2 = self.get_foreground();
+                        new_path = append_number_to_filename(&original_path, 2);
+                        match save_image(new_path, &img2, self.dimensions) {
+                            Ok(_) => {}
+                            Err(e) => println!("{}", e),
+                        }
+
+                        // combined
+                        let layered_img = self.get_layered_image(img, img2);
+                        match save_image(original_path, &layered_img, self.dimensions) {
+                            Ok(_) => {}
+                            Err(e) => println!("{}", e),
+                        }
+                    }
+
+                    ui.close_menu();
+                }
+            });
         });
     }
+}
+
+fn overlay_colors(
+    color1: (u8, u8, u8),
+    alpha1: f32,
+    color2: (u8, u8, u8),
+    alpha2: f32,
+) -> (u8, u8, u8) {
+    let r = ((1.0 - alpha2) * (alpha1 * color1.0 as f32 + alpha2 * color2.0 as f32)) as u8;
+    let g = ((1.0 - alpha2) * (alpha1 * color1.1 as f32 + alpha2 * color2.1 as f32)) as u8;
+    let b = ((1.0 - alpha2) * (alpha1 * color1.2 as f32 + alpha2 * color2.2 as f32)) as u8;
+
+    (r, g, b)
+}
+
+fn append_number_to_filename(path: &Path, number: usize) -> PathBuf {
+    // Get the stem (filename without extension) and extension from the original path
+    let stem = path.file_stem().unwrap().to_str().unwrap();
+    let extension = path.extension().map_or("", |ext| ext.to_str().unwrap());
+
+    // Append a number to the stem (filename)
+    let new_stem = format!("{}_{}", stem, number);
+
+    // Create a new PathBuf with the modified stem and the same extension
+    PathBuf::from(path.parent().unwrap()).join(format!("{}.{}", new_stem, extension))
+}
+
+fn save_image(
+    path: PathBuf,
+    color_image: &ColorImage,
+    dimensions: Dimensions,
+) -> Result<DynamicImage, image::ImageError> {
+    // get image
+
+    let pixels = color_image.as_raw();
+
+    // Create an RgbaImage from the raw pixel data
+    let img = RgbaImage::from_raw(
+        dimensions.width() as u32,
+        dimensions.height() as u32,
+        pixels.to_vec(),
+    )
+    .expect("Failed to create image");
+
+    // Convert the RgbaImage to a DynamicImage (required for saving as PNG)
+    let dynamic_img = DynamicImage::ImageRgba8(img);
+    dynamic_img.save(path)?;
+
+    Ok(dynamic_img)
 }

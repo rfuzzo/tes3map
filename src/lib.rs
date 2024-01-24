@@ -61,6 +61,34 @@ pub struct Dimensions {
     pub max_z: f32,
 }
 
+impl Dimensions {
+    fn width(&self) -> i32 {
+        (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32)
+    }
+    fn height(&self) -> i32 {
+        (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32)
+    }
+    fn size(&self) -> [usize; 2] {
+        [self.width() as usize, self.height() as usize]
+    }
+
+    fn tranform_to_cell_x(&self, x: i32) -> i32 {
+        x + self.min_x
+    }
+
+    fn tranform_to_cell_y(&self, y: i32) -> i32 {
+        self.max_y - y
+    }
+
+    fn tranform_to_canvas_x(&self, x: i32) -> i32 {
+        x - self.min_x
+    }
+
+    fn tranform_to_canvas_y(&self, y: i32) -> i32 {
+        self.max_y - y
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ZoomData {
     drag_start: Pos2,
@@ -207,34 +235,6 @@ fn depth_to_color(depth: f32, dimensions: Dimensions, ui_data: SavedUiData) -> C
     Color32::from_rgb(c.red, c.green, c.blue)
 }
 
-impl Dimensions {
-    fn nx(&self) -> i32 {
-        (1 + self.max_x - self.min_x) * (VERTEX_CNT as i32)
-    }
-    fn ny(&self) -> i32 {
-        (1 + self.max_y - self.min_y) * (VERTEX_CNT as i32)
-    }
-    fn size(&self) -> [usize; 2] {
-        [self.nx() as usize, self.ny() as usize]
-    }
-
-    fn tranform_to_cell_x(&self, x: i32) -> i32 {
-        x + self.min_x
-    }
-
-    fn tranform_to_cell_y(&self, y: i32) -> i32 {
-        self.max_y - y
-    }
-
-    fn tranform_to_canvas_x(&self, x: i32) -> i32 {
-        x - self.min_x
-    }
-
-    fn tranform_to_canvas_y(&self, y: i32) -> i32 {
-        self.max_y - y
-    }
-}
-
 fn color_map_to_pixels(
     dimensions: Dimensions,
     color_map: HashMap<(i32, i32), [[Color32; 65]; 65]>,
@@ -245,8 +245,8 @@ fn color_map_to_pixels(
     let max_y = dimensions.max_y;
     let min_y = dimensions.min_y;
 
-    let nx = dimensions.nx();
-    let ny = dimensions.ny();
+    let nx = dimensions.width();
+    let ny = dimensions.height();
     let size = nx as usize * ny as usize;
     let mut pixels_color = vec![Color32::WHITE; size];
 
@@ -293,8 +293,8 @@ fn height_map_to_pixel_heights(
     let max_y = dimensions.max_y;
     let min_y = dimensions.min_y;
 
-    let nx = dimensions.nx();
-    let ny = dimensions.ny();
+    let nx = dimensions.width();
+    let ny = dimensions.height();
     let size = nx as usize * ny as usize;
     let mut pixels = vec![-1.0; size];
 
