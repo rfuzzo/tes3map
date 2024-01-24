@@ -160,11 +160,14 @@ where
                     .unwrap(),
             )
     });
-
     plugins
 }
 
 fn get_color_for_height(value: f32, dimensions: Dimensions, ui_data: SavedUiData) -> Color32 {
+    if value < dimensions.min_z {
+        return Color32::TRANSPARENT;
+    }
+
     if value < 0.0 {
         depth_to_color(value, dimensions, ui_data)
     } else {
@@ -296,7 +299,8 @@ fn height_map_to_pixel_heights(
     let nx = dimensions.width();
     let ny = dimensions.height();
     let size = nx as usize * ny as usize;
-    let mut pixels = vec![-1.0; size];
+    // TODO hack to paint unset tiles
+    let mut pixels = vec![dimensions.min_z - 1.0; size];
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
@@ -323,7 +327,7 @@ fn height_map_to_pixel_heights(
 
                         let i = (ty * nx) + tx;
 
-                        pixels[i as usize] = -1.0;
+                        pixels[i as usize] = dimensions.min_z - 1.0;
                     }
                 }
             }

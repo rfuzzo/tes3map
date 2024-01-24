@@ -1,8 +1,8 @@
-use std::{collections::HashMap, env, path::PathBuf};
+use std::{collections::HashMap, env, fs::File, io::Write, path::PathBuf};
 
 use egui::{pos2, reset_button, Color32, ColorImage, Pos2, Rect, Sense};
 use image::{DynamicImage, RgbaImage};
-use tes3::esp::{Landscape, Plugin};
+use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture, Plugin};
 
 use crate::*;
 
@@ -58,6 +58,7 @@ impl TemplateApp {
     fn load_data(
         &mut self,
         records: &HashMap<(i32, i32), Landscape>,
+        _textures: &HashMap<u32, LandscapeTexture>,
     ) -> Option<(ColorImage, ColorImage)> {
         self.background = None;
         self.foreground = None;
@@ -111,18 +112,45 @@ impl TemplateApp {
         // calculate heights
         let mut min_z: Option<f32> = None;
         let mut max_z: Option<f32> = None;
+
         let mut heights_map: HashMap<(i32, i32), [[f32; 65]; 65]> = HashMap::default();
+        let texture_map: HashMap<String, Vec<String>> = HashMap::default();
 
         for cy in min_y..max_y + 1 {
             for cx in min_x..max_x + 1 {
                 if let Some(landscape) = records.get(&(cx, cy)) {
-                    // get vertex data
-                    if let Some(vertex_heights) = &landscape.vertex_heights {
+                    // texture_indices
+                    // if landscape
+                    //     .landscape_flags
+                    //     .contains(LandscapeFlags::USES_TEXTURES)
+                    // {
+                    //     //println!("landscape ({},{})", cx, cy);
+
+                    //     let data = &landscape.texture_indices.data;
+                    //     let mut indices: Vec<String> = vec![];
+                    //     for y in 0..16 {
+                    //         for x in 0..16 {
+                    //             let key = data[y][x] as u32;
+                    //             if let Some(tex) = textures.get(&key) {
+                    //                 //println!("{x},{y}: {}", tex.file_name);
+                    //                 indices.push(tex.file_name.to_owned());
+                    //             } else {
+                    //                 indices.push("None".to_owned());
+                    //             }
+                    //         }
+                    //     }
+
+                    //     texture_map.insert(format!("{},{}", cx, cy), indices);
+                    // }
+
+                    if landscape
+                        .landscape_flags
+                        .contains(LandscapeFlags::USES_VERTEX_HEIGHTS_AND_NORMALS)
+                    {
+                        // get vertex data
                         // get data
-                        let data = vertex_heights.data.clone();
-
+                        let data = &landscape.vertex_heights.data;
                         let mut heights: [[f32; 65]; 65] = [[0.0; VERTEX_CNT]; VERTEX_CNT];
-
                         for y in 0..VERTEX_CNT {
                             for x in 0..VERTEX_CNT {
                                 heights[y][x] = data[y][x] as f32;
@@ -130,7 +158,7 @@ impl TemplateApp {
                         }
 
                         // decode
-                        let mut offset: f32 = vertex_heights.offset;
+                        let mut offset: f32 = landscape.vertex_heights.offset;
                         for row in heights.iter_mut().take(VERTEX_CNT) {
                             for x in row.iter_mut().take(VERTEX_CNT) {
                                 offset += *x;
@@ -192,6 +220,12 @@ impl TemplateApp {
         let mut img2 = ColorImage::new(dimensions.size(), Color32::WHITE);
         img2.pixels = self.pixel_color.clone();
 
+        // dbg
+        let j = serde_json::to_string(&texture_map).expect("serialize");
+        let mut file = File::create("textures.json").expect("Unable to create file");
+        file.write_all(j.as_bytes())
+            .expect("Unable to write to file");
+
         Some((img, img2))
     }
 
@@ -202,11 +236,15 @@ impl TemplateApp {
         for cy in d.min_y..d.max_y + 1 {
             for cx in d.min_x..d.max_x + 1 {
                 if let Some(landscape) = self.landscape_records.get(&(cx, cy)) {
-                    // get vertex data
-                    if let Some(vertex_colors) = &landscape.vertex_colors {
-                        let data = vertex_colors.data.clone();
-                        let mut colors: [[Color32; 65]; 65] =
-                            [[Color32::WHITE; VERTEX_CNT]; VERTEX_CNT];
+                    // get color data
+                    let mut colors: [[Color32; 65]; 65] =
+                        [[Color32::TRANSPARENT; VERTEX_CNT]; VERTEX_CNT];
+
+                    if landscape
+                        .landscape_flags
+                        .contains(LandscapeFlags::USES_VERTEX_COLORS)
+                    {
+                        let data = &landscape.vertex_colors.data.clone();
 
                         for y in 0..VERTEX_CNT {
                             for x in 0..VERTEX_CNT {
@@ -229,9 +267,8 @@ impl TemplateApp {
                                 colors[y][x] = rgb;
                             }
                         }
-
-                        color_map.insert((cx, cy), colors);
                     }
+                    color_map.insert((cx, cy), colors);
                 }
             }
         }
@@ -240,23 +277,24 @@ impl TemplateApp {
     }
 
     fn load_folder(&mut self, path: &PathBuf, ctx: &egui::Context) {
-        let plugins = get_plugins_sorted(&path, false);
-
         let mut records: HashMap<(i32, i32), Landscape> = HashMap::default();
-        for path in plugins {
+        let mut textures: HashMap<u32, LandscapeTexture> = HashMap::default();
+
+        for path in get_plugins_sorted(&path, false) {
             let mut plugin = Plugin::new();
             if plugin.load_path(&path).is_ok() {
-                let objects = plugin
-                    .into_objects_of_type::<Landscape>()
-                    .collect::<Vec<_>>();
-                for r in objects {
+                for r in plugin.objects_of_type::<Landscape>() {
                     let key = r.grid;
-                    records.insert(key, r);
+                    records.insert(key, r.clone());
+                }
+                for r in plugin.into_objects_of_type::<LandscapeTexture>() {
+                    let key = r.index;
+                    textures.insert(key, r);
                 }
             }
         }
 
-        if let Some((back, fore)) = self.load_data(&records) {
+        if let Some((back, fore)) = self.load_data(&records, &textures) {
             let _: &egui::TextureHandle = self
                 .background
                 .get_or_insert_with(|| ctx.load_texture("background", back, Default::default()));
@@ -349,11 +387,17 @@ impl TemplateApp {
             let mut plugin = Plugin::new();
             if plugin.load_path(&path).is_ok() {
                 let mut records: HashMap<(i32, i32), Landscape> = HashMap::default();
-                for r in plugin.into_objects_of_type::<Landscape>() {
+                let mut textures: HashMap<u32, LandscapeTexture> = HashMap::default();
+                for r in plugin.objects_of_type::<Landscape>() {
                     let key = r.grid;
-                    records.insert(key, r);
+                    records.insert(key, r.clone());
                 }
-                if let Some((back, fore)) = self.load_data(&records) {
+                for r in plugin.into_objects_of_type::<LandscapeTexture>() {
+                    let key = r.index;
+                    textures.insert(key, r);
+                }
+
+                if let Some((back, fore)) = self.load_data(&records, &textures) {
                     let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
                         ctx.load_texture("background", back, Default::default())
                     });
@@ -375,7 +419,7 @@ impl TemplateApp {
             let a1 = color1.a() as f32 / 255.0;
             let a2 = color2.a() as f32 / 255.0;
             let f = overlay_colors(rgb1, a1, rgb2, a2);
-            layered[i] = Color32::from_rgb(f.0, f.1, f.2);
+            layered[i] = Color32::from_rgba_premultiplied(f.0, f.1, f.2, f.3);
         }
         let mut layered_img = ColorImage::new(self.dimensions.size(), Color32::TRANSPARENT);
         layered_img.pixels = layered;
@@ -650,12 +694,13 @@ fn overlay_colors(
     alpha1: f32,
     color2: (u8, u8, u8),
     alpha2: f32,
-) -> (u8, u8, u8) {
+) -> (u8, u8, u8, u8) {
     let r = ((1.0 - alpha2) * (alpha1 * color1.0 as f32 + alpha2 * color2.0 as f32)) as u8;
     let g = ((1.0 - alpha2) * (alpha1 * color1.1 as f32 + alpha2 * color2.1 as f32)) as u8;
     let b = ((1.0 - alpha2) * (alpha1 * color1.2 as f32 + alpha2 * color2.2 as f32)) as u8;
+    let a = alpha1 * 255.0; // TODO HACK
 
-    (r, g, b)
+    (r, g, b, a as u8)
 }
 
 fn append_number_to_filename(path: &Path, number: usize) -> PathBuf {
