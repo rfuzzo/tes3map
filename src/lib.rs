@@ -257,7 +257,7 @@ fn color_map_to_pixels(
 
     let nx = dimensions.width() * VERTEX_CNT;
     let ny = dimensions.height() * VERTEX_CNT;
-    let size = nx as usize * ny as usize;
+    let size = nx * ny;
     let mut pixels_color = vec![Color32::WHITE; size];
 
     for cy in min_y..max_y + 1 {
@@ -272,7 +272,7 @@ fn color_map_to_pixels(
                         let ty = ty + y;
 
                         let i = (ty * nx) + tx;
-                        pixels_color[i as usize] = *value;
+                        pixels_color[i] = *value;
                     }
                 }
             } else {
@@ -283,7 +283,7 @@ fn color_map_to_pixels(
 
                         let i = (ty * nx) + tx;
 
-                        pixels_color[i as usize] = DEFAULT_COLOR;
+                        pixels_color[i] = DEFAULT_COLOR;
                     }
                 }
             }
@@ -318,7 +318,7 @@ fn height_map_to_pixel_heights(
 
                         let stride = dimensions.width() * VERTEX_CNT;
                         let i = (ty * stride) + tx;
-                        pixels[i as usize] = *value;
+                        pixels[i] = *value;
                     }
                 }
             } else {
@@ -329,7 +329,7 @@ fn height_map_to_pixel_heights(
 
                         let stride = dimensions.width() * VERTEX_CNT;
                         let i = (ty * stride) + tx;
-                        pixels[i as usize] = dimensions.min_z - 1.0;
+                        pixels[i] = dimensions.min_z - 1.0;
                     }
                 }
             }

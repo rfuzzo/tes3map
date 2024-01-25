@@ -211,8 +211,8 @@ impl TemplateApp {
         } else {
             ColorImage::new(
                 [
-                    self.dimensions.width() as usize * CELL_SIZE as usize,
-                    self.dimensions.height() as usize * CELL_SIZE as usize,
+                    self.dimensions.width() * CELL_SIZE,
+                    self.dimensions.height() * CELL_SIZE,
                 ],
                 Color32::GOLD,
             )
@@ -451,7 +451,7 @@ impl TemplateApp {
     fn get_textured_pixels(&self) -> Option<ColorImage> {
         let d = self.dimensions;
         let size = d.pixel_size(CELL_SIZE);
-        let mut pixels_color = vec![Color32::TRANSPARENT; size as usize];
+        let mut pixels_color = vec![Color32::TRANSPARENT; size];
 
         for cy in d.min_y..d.max_y + 1 {
             for cx in d.min_x..d.max_x + 1 {
@@ -460,31 +460,36 @@ impl TemplateApp {
                         .landscape_flags
                         .contains(LandscapeFlags::USES_TEXTURES)
                     {
-                        // each tile is subdivided into a 16x16 grid
-                        let data = &landscape.texture_indices.data;
-                        for gy in 0..GRID_SIZE {
+                        {
+                            let data = &landscape.texture_indices.data;
                             for gx in 0..GRID_SIZE {
-                                let key = data[gy][gx] as u32;
-                                let Some(color_image) = self.texture_map.get(&key) else {
-                                    continue;
-                                };
+                                for gy in 0..GRID_SIZE {
+                                    let dx = (4 * (gy % 4)) + (gx % 4);
+                                    let dy = (4 * (gy / 4)) + (gx / 4);
 
-                                // assign pixel
-                                for y in 0..TEXTURE_SIZE {
+                                    let key = data[dy][dx] as u32;
+                                    let Some(color_image) = self.texture_map.get(&key) else {
+                                        continue;
+                                    };
+
+                                    // textures per tile
                                     for x in 0..TEXTURE_SIZE {
-                                        let tx = d.tranform_to_canvas_x(cx) * CELL_SIZE
-                                            + gx * TEXTURE_SIZE
-                                            + x;
-                                        let ty = d.tranform_to_canvas_y(cy) * CELL_SIZE
-                                            + (GRID_SIZE - gy) * TEXTURE_SIZE
-                                            + y;
+                                        for y in 0..TEXTURE_SIZE {
+                                            let tx = d.tranform_to_canvas_x(cx) * CELL_SIZE
+                                                + gx * TEXTURE_SIZE
+                                                + x;
+                                            let ty = d.tranform_to_canvas_y(cy) * CELL_SIZE
+                                                + (GRID_SIZE - gy) * TEXTURE_SIZE
+                                                + y;
 
-                                        // let index = (y * TEXTURE_SIZE) + x;
-                                        // let color = color_image.pixels[index];
+                                            let stride = d.width() * CELL_SIZE;
+                                            let i = (ty * stride) + tx;
 
-                                        let stride = d.width() * CELL_SIZE;
-                                        let i = (ty * stride) + tx;
-                                        pixels_color[i] = Color32::RED;
+                                            let color = Color32::from_rgb(255, (gx * gy) as u8, 0);
+                                            let index = (y * TEXTURE_SIZE) + x;
+                                            //let color = color_image.pixels[index];
+                                            pixels_color[i] = color;
+                                        }
                                     }
                                 }
                             }
@@ -494,19 +499,20 @@ impl TemplateApp {
                     // no landscape
                     for gx in 0..GRID_SIZE {
                         for gy in 0..GRID_SIZE {
+                            // textures per tile
                             for x in 0..TEXTURE_SIZE {
                                 for y in 0..TEXTURE_SIZE {
                                     let tx = d.tranform_to_canvas_x(cx) * CELL_SIZE
-                                        + (gx * TEXTURE_SIZE)
+                                        + gx * TEXTURE_SIZE
                                         + x;
                                     let ty = d.tranform_to_canvas_y(cy) * CELL_SIZE
-                                        + (gy * TEXTURE_SIZE)
+                                        + gy * TEXTURE_SIZE
                                         + y;
 
                                     let stride = d.width() * CELL_SIZE;
                                     let i = (ty * stride) + tx;
 
-                                    pixels_color[i as usize] = Color32::BLACK;
+                                    pixels_color[i] = Color32::BLACK;
                                 }
                             }
                         }
@@ -525,9 +531,7 @@ impl TemplateApp {
             return None;
         };
 
-        let tex_path = PathBuf::from(data_files)
-            .join("Textures")
-            .join(r.file_name.clone());
+        let tex_path = data_files.join("Textures").join(r.file_name.clone());
         if !tex_path.exists() {
             return None;
         }
