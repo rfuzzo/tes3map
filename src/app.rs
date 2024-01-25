@@ -260,14 +260,9 @@ impl TemplateApp {
 
     pub fn get_layered_image(&mut self, img: ColorImage, img2: ColorImage) -> ColorImage {
         let mut layered = img.pixels.clone();
-        for (i, color1) in img.pixels.iter().enumerate() {
+        for (i, color1) in img.pixels.into_iter().enumerate() {
             let color2 = img2.pixels[i];
-            let rgb1 = (color1.r(), color1.g(), color1.b());
-            let rgb2 = (color2.r(), color2.g(), color2.b());
-            let a1 = color1.a() as f32 / 255.0;
-            let a2 = color2.a() as f32 / 255.0;
-            let f = overlay_colors(rgb1, a1, rgb2, a2);
-            layered[i] = Color32::from_rgba_premultiplied(f.0, f.1, f.2, f.3);
+            layered[i] = overlay_colors(color1, color2);
         }
         let mut layered_img = ColorImage::new(
             self.dimensions.pixel_size_tuple(VERTEX_CNT),
@@ -319,13 +314,28 @@ impl TemplateApp {
                                             let sy = y * (TEXTURE_MAX_SIZE / texture_size);
                                             let index = (sy * texture_size) + sx;
 
-                                            let color = color_image.pixels[index];
-                                            // TODO tint blue when under water
-                                            // if let Some(height) = self.heights.get(i) {
-                                            //     if *height < 0_f32 {
-                                            //         color = Color32::BLUE;
-                                            //     }
-                                            // }
+                                            let mut color = color_image.pixels[index];
+
+                                            // blend color when under water
+                                            let screenx = tx * VERTEX_CNT / d.cell_size();
+                                            let screeny = ty * VERTEX_CNT / d.cell_size();
+
+                                            if let Some(height) =
+                                                self.height_from_screen_space(screenx, screeny)
+                                            {
+                                                if height < 0_f32 {
+                                                    // let a = (1.0
+                                                    //     - (height / self.dimensions_z.min_z))
+                                                    //     .clamp(0.0, 1.0);
+                                                    let a = 0.5;
+
+                                                    color = overlay_colors_with_alpha(
+                                                        color,
+                                                        Color32::BLUE,
+                                                        a,
+                                                    );
+                                                }
+                                            }
 
                                             pixels_color[i] = color;
                                         }
@@ -436,6 +446,11 @@ impl TemplateApp {
                 Color32::BLACK,
             )
         }
+    }
+
+    pub fn height_from_screen_space(&self, x: usize, y: usize) -> Option<f32> {
+        let i = (y * self.dimensions.stride(VERTEX_CNT)) + x;
+        self.heights.get(i as usize).copied()
     }
 
     // UI methods

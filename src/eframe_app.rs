@@ -196,15 +196,11 @@ impl eframe::App for TemplateApp {
                 let x = cell_pos_zeroed.x as usize;
                 let y = cell_pos_zeroed.y as usize;
 
-                let i = (y * self.dimensions.stride(VERTEX_CNT)) + x;
-
-                if i < self.heights.len() {
+                if let Some(value) = self.height_from_screen_space(x, y) {
                     // get cell grid
                     let cx = self.dimensions.tranform_to_cell_x((x / VERTEX_CNT) as i32);
                     let cy = self.dimensions.tranform_to_cell_y((y / VERTEX_CNT) as i32);
 
-                    // get height
-                    let value = self.heights[i as usize];
                     self.info = format!("({cx}, {cy}), height: {value}",);
                 }
 
@@ -258,6 +254,7 @@ impl eframe::App for TemplateApp {
                 if ui.button("Reset zoom").clicked() {
                     self.reset_pan();
                     self.reset_zoom();
+                    ui.close_menu();
                 }
 
                 ui.separator();

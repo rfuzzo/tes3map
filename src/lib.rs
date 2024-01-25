@@ -386,18 +386,25 @@ fn create_image(
     img
 }
 
-fn overlay_colors(
-    color1: (u8, u8, u8),
-    alpha1: f32,
-    color2: (u8, u8, u8),
-    alpha2: f32,
-) -> (u8, u8, u8, u8) {
-    let r = ((1.0 - alpha2) * (alpha1 * color1.0 as f32 + alpha2 * color2.0 as f32)) as u8;
-    let g = ((1.0 - alpha2) * (alpha1 * color1.1 as f32 + alpha2 * color2.1 as f32)) as u8;
-    let b = ((1.0 - alpha2) * (alpha1 * color1.2 as f32 + alpha2 * color2.2 as f32)) as u8;
+fn overlay_colors(color1: Color32, color2: Color32) -> Color32 {
+    let alpha1 = color1.a() as f32 / 255.0;
+    let alpha2 = color2.a() as f32 / 255.0;
+
+    let r = ((1.0 - alpha2) * (alpha1 * color1.r() as f32 + alpha2 * color2.r() as f32)) as u8;
+    let g = ((1.0 - alpha2) * (alpha1 * color1.g() as f32 + alpha2 * color2.g() as f32)) as u8;
+    let b = ((1.0 - alpha2) * (alpha1 * color1.b() as f32 + alpha2 * color2.b() as f32)) as u8;
     let a = alpha1 * 255.0; // TODO HACK
 
-    (r, g, b, a as u8)
+    Color32::from_rgba_premultiplied(r, g, b, a as u8)
+}
+
+fn overlay_colors_with_alpha(color1: Color32, color2: Color32, alpha1: f32) -> Color32 {
+    let alpha2 = 1_f32 - alpha1;
+    let r = (alpha1 * color1.r() as f32 + alpha2 * color2.r() as f32) as u8;
+    let g = (alpha1 * color1.g() as f32 + alpha2 * color2.g() as f32) as u8;
+    let b = (alpha1 * color1.b() as f32 + alpha2 * color2.b() as f32) as u8;
+
+    Color32::from_rgba_premultiplied(r, g, b, 255)
 }
 
 fn append_number_to_filename(path: &Path, number: usize) -> PathBuf {
