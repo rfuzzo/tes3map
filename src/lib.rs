@@ -4,6 +4,7 @@ mod app;
 mod eframe_app;
 
 pub use app::TemplateApp;
+use tes3::esp::{Landscape, LandscapeFlags};
 
 use std::{
     collections::HashMap,
@@ -19,10 +20,9 @@ use image::{
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
-const TEXTURE_SIZE: usize = 64; //256;
+const TEXTURE_MIN_SIZE: usize = 8;
+const TEXTURE_MAX_SIZE: usize = 256;
 const GRID_SIZE: usize = 16;
-
-const CELL_SIZE: usize = TEXTURE_SIZE * GRID_SIZE;
 
 const VERTEX_CNT: usize = 65;
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
@@ -64,17 +64,33 @@ impl Default for SavedUiData {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Dimensions {
     pub min_x: i32,
     pub min_y: i32,
     pub max_x: i32,
     pub max_y: i32,
-    pub min_z: f32,
-    pub max_z: f32,
+
+    pub texture_size: usize,
+}
+
+impl Default for Dimensions {
+    fn default() -> Self {
+        Self {
+            min_x: Default::default(),
+            min_y: Default::default(),
+            max_x: Default::default(),
+            max_y: Default::default(),
+            texture_size: 32,
+        }
+    }
 }
 
 impl Dimensions {
+    fn cell_size(&self) -> usize {
+        self.texture_size * GRID_SIZE
+    }
+
     fn width(&self) -> usize {
         (1 + self.max_x - self.min_x).max(0) as usize
     }
@@ -111,6 +127,12 @@ impl Dimensions {
     fn tranform_to_canvas_y(&self, y: i32) -> usize {
         (self.max_y - y).max(0) as usize
     }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DimensionsZ {
+    pub min_z: f32,
+    pub max_z: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -187,7 +209,7 @@ where
     plugins
 }
 
-fn get_color_for_height(value: f32, dimensions: Dimensions, ui_data: SavedUiData) -> Color32 {
+fn get_color_for_height(value: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> Color32 {
     if value < dimensions.min_z {
         return Color32::TRANSPARENT;
     }
@@ -199,7 +221,7 @@ fn get_color_for_height(value: f32, dimensions: Dimensions, ui_data: SavedUiData
     }
 }
 
-fn height_to_color(height: f32, dimensions: Dimensions, ui_data: SavedUiData) -> Color32 {
+fn height_to_color(height: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> Color32 {
     let b: LinSrgb<u8> = LinSrgb::from_components((
         ui_data.height_base.r(),
         ui_data.height_base.g(),
@@ -226,7 +248,7 @@ fn height_to_color(height: f32, dimensions: Dimensions, ui_data: SavedUiData) ->
     Color32::from_rgb(c.red, c.green, c.blue)
 }
 
-fn depth_to_color(depth: f32, dimensions: Dimensions, ui_data: SavedUiData) -> Color32 {
+fn depth_to_color(depth: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> Color32 {
     let b: LinSrgb<u8> = LinSrgb::from_components((
         ui_data.depth_base.r(),
         ui_data.depth_base.g(),
@@ -302,6 +324,7 @@ fn color_map_to_pixels(
 
 fn height_map_to_pixel_heights(
     dimensions: Dimensions,
+    dimensions_z: DimensionsZ,
     heights_map: HashMap<(i32, i32), [[f32; 65]; 65]>,
 ) -> Vec<f32> {
     // dimensions
@@ -312,7 +335,7 @@ fn height_map_to_pixel_heights(
 
     let size = dimensions.pixel_size(VERTEX_CNT);
     // TODO hack to paint unset tiles
-    let mut pixels = vec![dimensions.min_z - 1.0; size];
+    let mut pixels = vec![dimensions_z.min_z - 1.0; size];
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
@@ -336,7 +359,7 @@ fn height_map_to_pixel_heights(
 
                         let stride = dimensions.width() * VERTEX_CNT;
                         let i = (ty * stride) + tx;
-                        pixels[i] = dimensions.min_z - 1.0;
+                        pixels[i] = dimensions_z.min_z - 1.0;
                     }
                 }
             }
@@ -349,13 +372,13 @@ fn height_map_to_pixel_heights(
 fn create_image(
     pixels: &[f32],
     size: [usize; 2],
-    dimensions: Dimensions,
+    dimensions_z: DimensionsZ,
     ui_data: SavedUiData,
 ) -> ColorImage {
     let mut img = ColorImage::new(size, Color32::WHITE);
     let p = pixels
         .iter()
-        .map(|f| get_color_for_height(*f, dimensions, ui_data))
+        .map(|f| get_color_for_height(*f, dimensions_z, ui_data))
         .collect::<Vec<_>>();
     img.pixels = p;
     img
@@ -409,4 +432,131 @@ fn save_image(path: PathBuf, color_image: &ColorImage) -> Result<(), image::Imag
         ));
         Err(e)
     }
+}
+
+fn calculate_dimensions(landscape_records: &HashMap<(i32, i32), Landscape>) -> Option<Dimensions> {
+    let mut min_x: Option<i32> = None;
+    let mut min_y: Option<i32> = None;
+    let mut max_x: Option<i32> = None;
+    let mut max_y: Option<i32> = None;
+
+    for key in landscape_records.keys() {
+        // get grid dimensions
+        let x = key.0;
+        let y = key.1;
+
+        if let Some(minx) = min_x {
+            if x < minx {
+                min_x = Some(x);
+            }
+        } else {
+            min_x = Some(x);
+        }
+        if let Some(maxx) = max_x {
+            if x > maxx {
+                max_x = Some(x);
+            }
+        } else {
+            max_x = Some(x);
+        }
+        if let Some(miny) = min_y {
+            if y < miny {
+                min_y = Some(y);
+            }
+        } else {
+            min_y = Some(y);
+        }
+        if let Some(maxy) = max_y {
+            if y > maxy {
+                max_y = Some(y);
+            }
+        } else {
+            max_y = Some(y);
+        }
+    }
+
+    let min_y = min_y?;
+    let max_y = max_y?;
+    let min_x = min_x?;
+    let max_x = max_x?;
+    let dimensions = Dimensions {
+        min_x,
+        min_y,
+        max_x,
+        max_y,
+        texture_size: TEXTURE_MIN_SIZE,
+    };
+    Some(dimensions)
+}
+
+fn calculate_heights(
+    landscape_records: &HashMap<(i32, i32), Landscape>,
+    dimensions: Dimensions,
+) -> Option<(Vec<f32>, DimensionsZ)> {
+    let mut min_z: Option<f32> = None;
+    let mut max_z: Option<f32> = None;
+    let mut heights_map: HashMap<(i32, i32), [[f32; 65]; 65]> = HashMap::default();
+
+    for cy in dimensions.min_y..dimensions.max_y + 1 {
+        for cx in dimensions.min_x..dimensions.max_x + 1 {
+            if let Some(landscape) = landscape_records.get(&(cx, cy)) {
+                if landscape
+                    .landscape_flags
+                    .contains(LandscapeFlags::USES_VERTEX_HEIGHTS_AND_NORMALS)
+                {
+                    // get vertex data
+                    // get data
+                    let data = &landscape.vertex_heights.data;
+                    let mut heights: [[f32; 65]; 65] = [[0.0; VERTEX_CNT]; VERTEX_CNT];
+                    for y in 0..VERTEX_CNT {
+                        for x in 0..VERTEX_CNT {
+                            heights[y][x] = data[y][x] as f32;
+                        }
+                    }
+
+                    // decode
+                    let mut offset: f32 = landscape.vertex_heights.offset;
+                    for row in heights.iter_mut().take(VERTEX_CNT) {
+                        for x in row.iter_mut().take(VERTEX_CNT) {
+                            offset += *x;
+                            *x = offset;
+                        }
+                        offset = row[0];
+                    }
+
+                    for row in &mut heights {
+                        for height in row {
+                            *height *= 8.0;
+
+                            let z = *height;
+                            if let Some(minz) = min_z {
+                                if z < minz {
+                                    min_z = Some(z);
+                                }
+                            } else {
+                                min_z = Some(z);
+                            }
+                            if let Some(maxz) = max_z {
+                                if z > maxz {
+                                    max_z = Some(z);
+                                }
+                            } else {
+                                max_z = Some(z);
+                            }
+                        }
+                    }
+
+                    heights_map.insert((cx, cy), heights);
+                }
+            }
+        }
+    }
+
+    let min_z = min_z?;
+    let max_z = max_z?;
+    let dimensions_z = DimensionsZ { min_z, max_z };
+
+    let heights = height_map_to_pixel_heights(dimensions, dimensions_z, heights_map);
+
+    Some((heights, dimensions_z))
 }

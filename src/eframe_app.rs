@@ -46,10 +46,52 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        // egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
-        //     ui.heading("Cells");
-        //     ui.separator();
-        // });
+        egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
+            ui.heading("Cells");
+            if ui.button("Paint all").clicked() {
+                // paint all
+                self.load_data(ctx);
+            }
+
+            ui.separator();
+
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    if let Some(d) = calculate_dimensions(&self.landscape_records) {
+                        for y in (d.min_y..=d.max_y).rev() {
+                            let mut any = false;
+                            for x in d.min_x..=d.max_x {
+                                if let Some(_v) = self.landscape_records.get(&(x, y)) {
+                                    any = true;
+                                }
+                            }
+                            if any {
+                                ui.collapsing(format!("Y: {y}"), |ui| {
+                                    for x in d.min_x..=d.max_x {
+                                        if let Some(v) = self.landscape_records.get(&(x, y)) {
+                                            if ui.button(format!("({x},{y})")).clicked() {
+                                                // store
+                                                self.current_landscape = Some(v.clone());
+
+                                                // TODO generate
+                                                let dimensions = Dimensions {
+                                                    min_x: x,
+                                                    min_y: y,
+                                                    max_x: x,
+                                                    max_y: y,
+                                                    texture_size: TEXTURE_MAX_SIZE,
+                                                };
+                                                self.load_data_with_dimension(dimensions, ctx);
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
+                });
+        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
@@ -59,8 +101,8 @@ impl eframe::App for TemplateApp {
                 self.dimensions.max_y,
                 self.dimensions.min_x,
                 self.dimensions.max_x,
-                self.dimensions.min_z,
-                self.dimensions.max_z
+                self.dimensions_z.min_z,
+                self.dimensions_z.max_z
             ));
 
             ui.separator();
@@ -89,10 +131,6 @@ impl eframe::App for TemplateApp {
             }
 
             // painter
-            // let clip_rect = ui.available_rect_before_wrap();
-            // let painter = egui::Painter::new(ui.ctx().clone(), ui.layer_id(), clip_rect);
-            // let response = painter.ctx();
-
             let (response, painter) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::click_and_drag());
 

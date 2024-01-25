@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, io::Write, path::PathBuf};
 
 use egui::{reset_button, Color32, ColorImage, Pos2};
 
@@ -15,7 +15,7 @@ pub struct TemplateApp {
 
     // tes3
     #[serde(skip)]
-    landscape_records: HashMap<(i32, i32), Landscape>,
+    pub landscape_records: HashMap<(i32, i32), Landscape>,
     #[serde(skip)]
     texture_map: HashMap<u32, ColorImage>,
 
@@ -23,9 +23,11 @@ pub struct TemplateApp {
     #[serde(skip)]
     pub dimensions: Dimensions,
     #[serde(skip)]
+    pub dimensions_z: DimensionsZ,
+    #[serde(skip)]
     pub heights: Vec<f32>,
     #[serde(skip)]
-    pixel_color: Vec<Color32>,
+    foreground_pixels: Vec<Color32>,
 
     #[serde(skip)]
     pub background: Option<egui::TextureHandle>,
@@ -38,6 +40,8 @@ pub struct TemplateApp {
     data_files: Option<PathBuf>,
     #[serde(skip)]
     pub info: String,
+    #[serde(skip)]
+    pub current_landscape: Option<Landscape>,
 
     // ui
     pub ui_data: SavedUiData,
@@ -62,161 +66,71 @@ impl TemplateApp {
     }
 
     /// Assigns landscape_records, dimensions and pixels
-    fn load_data(&mut self) -> Option<(ColorImage, ColorImage, ColorImage)> {
+    pub fn load_data(&mut self, ctx: &egui::Context) {
         self.background = None;
         self.foreground = None;
         self.textured = None;
 
-        // get dimensions
-        let mut min_x: Option<i32> = None;
-        let mut min_y: Option<i32> = None;
-        let mut max_x: Option<i32> = None;
-        let mut max_y: Option<i32> = None;
+        // calculate dimensions
+        if let Some(dimensions) = calculate_dimensions(&self.landscape_records) {
+            self.dimensions = dimensions;
 
-        for key in self.landscape_records.keys() {
-            // get grid dimensions
-            let x = key.0;
-            let y = key.1;
+            // calculate heights
+            if let Some((heights, dimensions_z)) =
+                calculate_heights(&self.landscape_records, dimensions)
+            {
+                self.dimensions_z = dimensions_z;
+                self.heights = heights;
 
-            if let Some(minx) = min_x {
-                if x < minx {
-                    min_x = Some(x);
-                }
-            } else {
-                min_x = Some(x);
-            }
-            if let Some(maxx) = max_x {
-                if x > maxx {
-                    max_x = Some(x);
-                }
-            } else {
-                max_x = Some(x);
-            }
-            if let Some(miny) = min_y {
-                if y < miny {
-                    min_y = Some(y);
-                }
-            } else {
-                min_y = Some(y);
-            }
-            if let Some(maxy) = max_y {
-                if y > maxy {
-                    max_y = Some(y);
-                }
-            } else {
-                max_y = Some(y);
+                let background = self.get_background();
+                let foreground = self.get_foreground();
+                let textured = self.get_textured();
+
+                let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
+                    ctx.load_texture("background", background, Default::default())
+                });
+
+                let _: &egui::TextureHandle = self.foreground.get_or_insert_with(|| {
+                    ctx.load_texture("foreground", foreground, Default::default())
+                });
+
+                let _: &egui::TextureHandle = self.textured.get_or_insert_with(|| {
+                    ctx.load_texture("textured", textured, Default::default())
+                });
             }
         }
+    }
 
-        let min_y = min_y?;
-        let max_y = max_y?;
-        let min_x = min_x?;
-        let max_x = max_x?;
+    pub fn load_data_with_dimension(&mut self, dimensions: Dimensions, ctx: &egui::Context) {
+        self.background = None;
+        self.foreground = None;
+        self.textured = None;
+
+        self.dimensions = dimensions;
 
         // calculate heights
-        let mut min_z: Option<f32> = None;
-        let mut max_z: Option<f32> = None;
+        if let Some((heights, dimensions_z)) =
+            calculate_heights(&self.landscape_records, dimensions)
+        {
+            self.dimensions_z = dimensions_z;
+            self.heights = heights;
 
-        let mut heights_map: HashMap<(i32, i32), [[f32; 65]; 65]> = HashMap::default();
-        //let mut texture_map: HashMap<(i32, i32), Vec<String>> = HashMap::default();
+            let background = self.get_background();
+            let foreground = self.get_foreground();
+            let textured = self.get_textured();
 
-        for cy in min_y..max_y + 1 {
-            for cx in min_x..max_x + 1 {
-                if let Some(landscape) = self.landscape_records.get(&(cx, cy)) {
-                    if landscape
-                        .landscape_flags
-                        .contains(LandscapeFlags::USES_VERTEX_HEIGHTS_AND_NORMALS)
-                    {
-                        // get vertex data
-                        // get data
-                        let data = &landscape.vertex_heights.data;
-                        let mut heights: [[f32; 65]; 65] = [[0.0; VERTEX_CNT]; VERTEX_CNT];
-                        for y in 0..VERTEX_CNT {
-                            for x in 0..VERTEX_CNT {
-                                heights[y][x] = data[y][x] as f32;
-                            }
-                        }
+            let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
+                ctx.load_texture("background", background, Default::default())
+            });
 
-                        // decode
-                        let mut offset: f32 = landscape.vertex_heights.offset;
-                        for row in heights.iter_mut().take(VERTEX_CNT) {
-                            for x in row.iter_mut().take(VERTEX_CNT) {
-                                offset += *x;
-                                *x = offset;
-                            }
-                            offset = row[0];
-                        }
+            let _: &egui::TextureHandle = self.foreground.get_or_insert_with(|| {
+                ctx.load_texture("foreground", foreground, Default::default())
+            });
 
-                        for row in &mut heights {
-                            for height in row {
-                                *height *= 8.0;
-
-                                let z = *height;
-                                if let Some(minz) = min_z {
-                                    if z < minz {
-                                        min_z = Some(z);
-                                    }
-                                } else {
-                                    min_z = Some(z);
-                                }
-                                if let Some(maxz) = max_z {
-                                    if z > maxz {
-                                        max_z = Some(z);
-                                    }
-                                } else {
-                                    max_z = Some(z);
-                                }
-                            }
-                        }
-
-                        heights_map.insert((cx, cy), heights);
-                    }
-                }
-            }
+            let _: &egui::TextureHandle = self
+                .textured
+                .get_or_insert_with(|| ctx.load_texture("textured", textured, Default::default()));
         }
-
-        let min_z = min_z?;
-        let max_z = max_z?;
-
-        let dimensions = Dimensions {
-            min_x,
-            min_y,
-            max_x,
-            max_y,
-            min_z,
-            max_z,
-        };
-
-        let pixels = height_map_to_pixel_heights(dimensions, heights_map);
-
-        let img = create_image(
-            &pixels,
-            dimensions.pixel_size_tuple(VERTEX_CNT),
-            dimensions,
-            self.ui_data,
-        );
-
-        // assign data
-        self.dimensions = dimensions;
-        self.heights = pixels;
-
-        self.color_pixels_reload();
-        let mut img2 = ColorImage::new(dimensions.pixel_size_tuple(VERTEX_CNT), Color32::WHITE);
-        img2.pixels = self.pixel_color.clone();
-
-        let img3 = if let Some(i) = self.get_textured_pixels() {
-            i
-        } else {
-            ColorImage::new(
-                [
-                    self.dimensions.width() * CELL_SIZE,
-                    self.dimensions.height() * CELL_SIZE,
-                ],
-                Color32::GOLD,
-            )
-        };
-
-        Some((img, img2, img3))
     }
 
     fn color_pixels_reload(&mut self) {
@@ -263,7 +177,7 @@ impl TemplateApp {
             }
         }
 
-        self.pixel_color = color_map_to_pixels(d, color_map);
+        self.foreground_pixels = color_map_to_pixels(d, color_map);
     }
 
     pub fn load_folder(&mut self, path: &PathBuf, ctx: &egui::Context) {
@@ -286,36 +200,7 @@ impl TemplateApp {
             }
         }
 
-        if let Some((back, fore, tex)) = self.load_data() {
-            let _: &egui::TextureHandle = self
-                .background
-                .get_or_insert_with(|| ctx.load_texture("background", back, Default::default()));
-
-            let _: &egui::TextureHandle = self
-                .foreground
-                .get_or_insert_with(|| ctx.load_texture("foreground", fore, Default::default()));
-
-            let _: &egui::TextureHandle = self
-                .textured
-                .get_or_insert_with(|| ctx.load_texture("textured", tex, Default::default()));
-        }
-    }
-
-    pub fn get_background(&mut self) -> ColorImage {
-        create_image(
-            &self.heights,
-            self.dimensions.pixel_size_tuple(VERTEX_CNT),
-            self.dimensions,
-            self.ui_data,
-        )
-    }
-
-    pub fn get_foreground(&mut self) -> ColorImage {
-        let mut img2 =
-            ColorImage::new(self.dimensions.pixel_size_tuple(VERTEX_CNT), Color32::WHITE);
-        self.color_pixels_reload();
-        img2.pixels = self.pixel_color.clone();
-        img2
+        self.load_data(ctx);
     }
 
     pub fn open_folder(&mut self, ctx: &egui::Context) {
@@ -351,27 +236,23 @@ impl TemplateApp {
                     let key = r.grid;
                     self.landscape_records.insert(key, r.clone());
                 }
+                let mut missing_textures = vec![];
                 for r in plugin.into_objects_of_type::<LandscapeTexture>() {
                     let key = r.index;
                     if let Some(image) = self.load_texture(&r) {
                         self.texture_map.insert(key, image);
+                    } else if !missing_textures.contains(&r.file_name) {
+                        missing_textures.push(r.file_name);
+                    }
+                }
+                if let Ok(json) = serde_json::to_string_pretty(&missing_textures) {
+                    if let Ok(mut fs) = fs::File::create("missing_textures.json") {
+                        let _ = fs.write_all(json.as_bytes());
                     }
                 }
 
                 // get pictures
-                if let Some((back, fore, tex)) = self.load_data() {
-                    let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
-                        ctx.load_texture("background", back, Default::default())
-                    });
-
-                    let _: &egui::TextureHandle = self.foreground.get_or_insert_with(|| {
-                        ctx.load_texture("foreground", fore, Default::default())
-                    });
-
-                    let _: &egui::TextureHandle = self.textured.get_or_insert_with(|| {
-                        ctx.load_texture("textured", tex, Default::default())
-                    });
-                }
+                self.load_data(ctx);
             }
         }
     }
@@ -397,8 +278,9 @@ impl TemplateApp {
 
     fn get_textured_pixels(&self) -> Option<ColorImage> {
         let d = self.dimensions;
-        let size = d.pixel_size(CELL_SIZE);
+        let size = d.pixel_size(d.cell_size());
         let mut pixels_color = vec![Color32::TRANSPARENT; size];
+        let texture_size = d.texture_size;
 
         for cy in d.min_y..d.max_y + 1 {
             for cx in d.min_x..d.max_x + 1 {
@@ -420,20 +302,30 @@ impl TemplateApp {
                                     };
 
                                     // textures per tile
-                                    for x in 0..TEXTURE_SIZE {
-                                        for y in 0..TEXTURE_SIZE {
-                                            let tx = d.tranform_to_canvas_x(cx) * CELL_SIZE
-                                                + gx * TEXTURE_SIZE
+                                    for x in 0..texture_size {
+                                        for y in 0..texture_size {
+                                            let tx = d.tranform_to_canvas_x(cx) * d.cell_size()
+                                                + gx * texture_size
                                                 + x;
-                                            let ty = d.tranform_to_canvas_y(cy) * CELL_SIZE
-                                                + (GRID_SIZE - gy) * TEXTURE_SIZE
+                                            let ty = d.tranform_to_canvas_y(cy) * d.cell_size()
+                                                + (GRID_SIZE - 1 - gy) * texture_size
                                                 + y;
 
-                                            let stride = d.width() * CELL_SIZE;
+                                            let stride = d.width() * d.cell_size();
                                             let i = (ty * stride) + tx;
 
-                                            let index = (y * TEXTURE_SIZE) + x;
-                                            let color = color_image.pixels[index];
+                                            // pick every nth pixel from the texture to downsize
+                                            let sx = x * (TEXTURE_MAX_SIZE / texture_size);
+                                            let sy = y * (TEXTURE_MAX_SIZE / texture_size);
+                                            let index = (sy * texture_size) + sx;
+
+                                            let mut color = color_image.pixels[index];
+                                            if let Some(height) = self.heights.get(i) {
+                                                if *height < 0_f32 {
+                                                    color = Color32::BLUE;
+                                                }
+                                            }
+
                                             pixels_color[i] = color;
                                         }
                                     }
@@ -446,19 +338,19 @@ impl TemplateApp {
                     for gx in 0..GRID_SIZE {
                         for gy in 0..GRID_SIZE {
                             // textures per tile
-                            for x in 0..TEXTURE_SIZE {
-                                for y in 0..TEXTURE_SIZE {
-                                    let tx = d.tranform_to_canvas_x(cx) * CELL_SIZE
-                                        + gx * TEXTURE_SIZE
+                            for x in 0..texture_size {
+                                for y in 0..texture_size {
+                                    let tx = d.tranform_to_canvas_x(cx) * d.cell_size()
+                                        + gx * texture_size
                                         + x;
-                                    let ty = d.tranform_to_canvas_y(cy) * CELL_SIZE
-                                        + gy * TEXTURE_SIZE
+                                    let ty = d.tranform_to_canvas_y(cy) * d.cell_size()
+                                        + gy * texture_size
                                         + y;
 
-                                    let stride = d.width() * CELL_SIZE;
+                                    let stride = d.width() * d.cell_size();
                                     let i = (ty * stride) + tx;
 
-                                    pixels_color[i] = Color32::BLACK;
+                                    pixels_color[i] = DEFAULT_COLOR;
                                 }
                             }
                         }
@@ -467,7 +359,7 @@ impl TemplateApp {
             }
         }
 
-        let mut img = ColorImage::new(d.pixel_size_tuple(CELL_SIZE), Color32::GOLD);
+        let mut img = ColorImage::new(d.pixel_size_tuple(d.cell_size()), Color32::GOLD);
         img.pixels = pixels_color;
         Some(img)
     }
@@ -477,7 +369,8 @@ impl TemplateApp {
             return None;
         };
 
-        let tex_path = data_files.join("Textures").join(r.file_name.clone());
+        let texture = r.file_name.clone();
+        let tex_path = data_files.join("Textures").join(texture);
         if !tex_path.exists() {
             return None;
         }
@@ -487,7 +380,6 @@ impl TemplateApp {
             let ext = tex_path.extension().unwrap().to_string_lossy();
             if ext.contains("tga") {
                 reader.set_format(image::ImageFormat::Tga);
-                return None;
             } else if ext.contains("dds") {
                 reader.set_format(image::ImageFormat::Dds);
             } else {
@@ -510,6 +402,40 @@ impl TemplateApp {
         }
 
         None
+    }
+
+    // Shortcuts
+
+    pub fn get_background(&mut self) -> ColorImage {
+        create_image(
+            &self.heights,
+            self.dimensions.pixel_size_tuple(VERTEX_CNT),
+            self.dimensions_z,
+            self.ui_data,
+        )
+    }
+
+    pub fn get_foreground(&mut self) -> ColorImage {
+        let mut img2 =
+            ColorImage::new(self.dimensions.pixel_size_tuple(VERTEX_CNT), Color32::WHITE);
+        self.color_pixels_reload();
+        img2.pixels = self.foreground_pixels.clone();
+        img2
+    }
+
+    pub fn get_textured(&mut self) -> ColorImage {
+        if let Some(i) = self.get_textured_pixels() {
+            i
+        } else {
+            // default image
+            ColorImage::new(
+                [
+                    self.dimensions.width() * self.dimensions.cell_size(),
+                    self.dimensions.height() * self.dimensions.cell_size(),
+                ],
+                Color32::BLACK,
+            )
+        }
     }
 
     // UI methods
