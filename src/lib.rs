@@ -127,6 +127,10 @@ impl Dimensions {
     fn tranform_to_canvas_y(&self, y: i32) -> usize {
         (self.max_y - y).max(0) as usize
     }
+
+    fn stride(&self, pixel_per_cell: usize) -> usize {
+        self.width() * pixel_per_cell
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -334,8 +338,8 @@ fn height_map_to_pixel_heights(
     let min_y = dimensions.min_y;
 
     let size = dimensions.pixel_size(VERTEX_CNT);
-    // TODO hack to paint unset tiles
-    let mut pixels = vec![dimensions_z.min_z - 1.0; size];
+    // hack to paint unset tiles
+    let mut pixels = vec![dimensions_z.min_z - 1_f32; size];
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
@@ -346,8 +350,7 @@ fn height_map_to_pixel_heights(
                         let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
                         let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
 
-                        let stride = dimensions.width() * VERTEX_CNT;
-                        let i = (ty * stride) + tx;
+                        let i = (ty * dimensions.stride(VERTEX_CNT)) + tx;
                         pixels[i] = *value;
                     }
                 }
@@ -357,9 +360,8 @@ fn height_map_to_pixel_heights(
                         let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
                         let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
 
-                        let stride = dimensions.width() * VERTEX_CNT;
-                        let i = (ty * stride) + tx;
-                        pixels[i] = dimensions_z.min_z - 1.0;
+                        let i = (ty * dimensions.stride(VERTEX_CNT)) + tx;
+                        pixels[i] = dimensions_z.min_z - 1_f32;
                     }
                 }
             }

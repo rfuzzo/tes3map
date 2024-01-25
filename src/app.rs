@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use egui::{reset_button, Color32, ColorImage, Pos2};
 
@@ -236,20 +236,21 @@ impl TemplateApp {
                     let key = r.grid;
                     self.landscape_records.insert(key, r.clone());
                 }
-                let mut missing_textures = vec![];
+                // let mut missing_textures = vec![];
                 for r in plugin.into_objects_of_type::<LandscapeTexture>() {
                     let key = r.index;
                     if let Some(image) = self.load_texture(&r) {
                         self.texture_map.insert(key, image);
-                    } else if !missing_textures.contains(&r.file_name) {
-                        missing_textures.push(r.file_name);
                     }
+                    //  else if !missing_textures.contains(&r.file_name) {
+                    //     missing_textures.push(r.file_name);
+                    // }
                 }
-                if let Ok(json) = serde_json::to_string_pretty(&missing_textures) {
-                    if let Ok(mut fs) = fs::File::create("missing_textures.json") {
-                        let _ = fs.write_all(json.as_bytes());
-                    }
-                }
+                // if let Ok(json) = serde_json::to_string_pretty(&missing_textures) {
+                //     if let Ok(mut fs) = fs::File::create("missing_textures.json") {
+                //         let _ = fs.write_all(json.as_bytes());
+                //     }
+                // }
 
                 // get pictures
                 self.load_data(ctx);
@@ -311,20 +312,20 @@ impl TemplateApp {
                                                 + (GRID_SIZE - 1 - gy) * texture_size
                                                 + y;
 
-                                            let stride = d.width() * d.cell_size();
-                                            let i = (ty * stride) + tx;
+                                            let i = (ty * d.stride(d.cell_size())) + tx;
 
                                             // pick every nth pixel from the texture to downsize
                                             let sx = x * (TEXTURE_MAX_SIZE / texture_size);
                                             let sy = y * (TEXTURE_MAX_SIZE / texture_size);
                                             let index = (sy * texture_size) + sx;
 
-                                            let mut color = color_image.pixels[index];
-                                            if let Some(height) = self.heights.get(i) {
-                                                if *height < 0_f32 {
-                                                    color = Color32::BLUE;
-                                                }
-                                            }
+                                            let color = color_image.pixels[index];
+                                            // TODO tint blue when under water
+                                            // if let Some(height) = self.heights.get(i) {
+                                            //     if *height < 0_f32 {
+                                            //         color = Color32::BLUE;
+                                            //     }
+                                            // }
 
                                             pixels_color[i] = color;
                                         }
@@ -347,8 +348,7 @@ impl TemplateApp {
                                         + gy * texture_size
                                         + y;
 
-                                    let stride = d.width() * d.cell_size();
-                                    let i = (ty * stride) + tx;
+                                    let i = (ty * d.stride(d.cell_size())) + tx;
 
                                     pixels_color[i] = DEFAULT_COLOR;
                                 }
@@ -383,7 +383,7 @@ impl TemplateApp {
             } else if ext.contains("dds") {
                 reader.set_format(image::ImageFormat::Dds);
             } else {
-                // TODO do nothing
+                // not supported
                 return None;
             }
 

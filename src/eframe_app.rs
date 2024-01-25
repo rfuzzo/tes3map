@@ -74,7 +74,6 @@ impl eframe::App for TemplateApp {
                                                 // store
                                                 self.current_landscape = Some(v.clone());
 
-                                                // TODO generate
                                                 let dimensions = Dimensions {
                                                     min_x: x,
                                                     min_y: y,
@@ -160,11 +159,11 @@ impl eframe::App for TemplateApp {
 
             // transforms
             let to = canvas;
-            let from = egui::Rect::from_min_max(
+            let from: Rect = egui::Rect::from_min_max(
                 pos2(0.0, 0.0),
                 pos2(
-                    self.dimensions.width() as f32,
-                    self.dimensions.height() as f32,
+                    self.dimensions.width() as f32 * VERTEX_CNT as f32,
+                    self.dimensions.height() as f32 * VERTEX_CNT as f32,
                 ),
             );
             let to_screen = egui::emath::RectTransform::from_to(from, to);
@@ -191,24 +190,26 @@ impl eframe::App for TemplateApp {
 
             // hover
             if let Some(pointer_pos) = response.hover_pos() {
-                let canvas_pos = from_screen * pointer_pos;
+                let cell_pos_zeroed = from_screen * pointer_pos;
 
-                let canvas_pos_x = canvas_pos.x as usize;
-                let canvas_pos_y = canvas_pos.y as usize;
-                let i = ((canvas_pos_y * self.dimensions.width()) + canvas_pos_x) as usize;
+                // get pixel index
+                let x = cell_pos_zeroed.x as usize;
+                let y = cell_pos_zeroed.y as usize;
+
+                let i = (y * self.dimensions.stride(VERTEX_CNT)) + x;
 
                 if i < self.heights.len() {
-                    let value = self.heights[i];
+                    // get cell grid
+                    let cx = self.dimensions.tranform_to_cell_x((x / VERTEX_CNT) as i32);
+                    let cy = self.dimensions.tranform_to_cell_y((y / VERTEX_CNT) as i32);
 
-                    let x = canvas_pos.x as usize / VERTEX_CNT;
-                    let y = canvas_pos.y as usize / VERTEX_CNT;
-                    let cx = self.dimensions.tranform_to_cell_x(x as i32);
-                    let cy = self.dimensions.tranform_to_cell_y(y as i32);
-                    self.info = format!("({}, {}), height: {}", cx, cy, value);
+                    // get height
+                    let value = self.heights[i as usize];
+                    self.info = format!("({cx}, {cy}), height: {value}",);
                 }
 
                 if self.ui_data.show_tooltips {
-                    egui::show_tooltip(ui.ctx(), egui::Id::new("my_tooltip"), |ui| {
+                    egui::show_tooltip(ui.ctx(), egui::Id::new("hover_tooltip"), |ui| {
                         ui.label(self.info.clone());
                     });
                 }
@@ -242,7 +243,7 @@ impl eframe::App for TemplateApp {
             ui.expand_to_include_rect(painter.clip_rect());
 
             // settings
-            // TODO dumb hack
+            // dumb ui hack
             let settings_rect = egui::Rect::from_min_max(response.rect.min, pos2(0.0, 0.0));
             ui.put(settings_rect, egui::Label::new(""));
 
@@ -254,6 +255,13 @@ impl eframe::App for TemplateApp {
                 });
 
             response.context_menu(|ui| {
+                if ui.button("Reset zoom").clicked() {
+                    self.reset_pan();
+                    self.reset_zoom();
+                }
+
+                ui.separator();
+
                 if ui.button("Save as image").clicked() {
                     let file_option = rfd::FileDialog::new()
                         .add_filter("png", &["png"])
