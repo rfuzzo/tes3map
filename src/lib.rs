@@ -1,19 +1,26 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 mod app;
+mod eframe_app;
+
+pub use app::TemplateApp;
+
 use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
 
-pub use app::TemplateApp;
 use egui::{Color32, ColorImage, Pos2};
+use image::{
+    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
+    DynamicImage, ImageError, RgbaImage,
+};
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
-const TEXTURE_SIZE: usize = 2; //256;
-const GRID_SIZE: usize = 16; //16
+const TEXTURE_SIZE: usize = 64; //256;
+const GRID_SIZE: usize = 16;
 
 const CELL_SIZE: usize = TEXTURE_SIZE * GRID_SIZE;
 
@@ -352,4 +359,54 @@ fn create_image(
         .collect::<Vec<_>>();
     img.pixels = p;
     img
+}
+
+fn overlay_colors(
+    color1: (u8, u8, u8),
+    alpha1: f32,
+    color2: (u8, u8, u8),
+    alpha2: f32,
+) -> (u8, u8, u8, u8) {
+    let r = ((1.0 - alpha2) * (alpha1 * color1.0 as f32 + alpha2 * color2.0 as f32)) as u8;
+    let g = ((1.0 - alpha2) * (alpha1 * color1.1 as f32 + alpha2 * color2.1 as f32)) as u8;
+    let b = ((1.0 - alpha2) * (alpha1 * color1.2 as f32 + alpha2 * color2.2 as f32)) as u8;
+    let a = alpha1 * 255.0; // TODO HACK
+
+    (r, g, b, a as u8)
+}
+
+fn append_number_to_filename(path: &Path, number: usize) -> PathBuf {
+    // Get the stem (filename without extension) and extension from the original path
+    let stem = path.file_stem().unwrap().to_str().unwrap();
+    let extension = path.extension().map_or("", |ext| ext.to_str().unwrap());
+
+    // Append a number to the stem (filename)
+    let new_stem = format!("{}_{}", stem, number);
+
+    // Create a new PathBuf with the modified stem and the same extension
+    PathBuf::from(path.parent().unwrap()).join(format!("{}.{}", new_stem, extension))
+}
+
+fn save_image(path: PathBuf, color_image: &ColorImage) -> Result<(), image::ImageError> {
+    // get image
+
+    let pixels = color_image.as_raw();
+
+    // Create an RgbaImage from the raw pixel data
+    if let Some(img) = RgbaImage::from_raw(
+        color_image.width() as u32,
+        color_image.height() as u32,
+        pixels.to_vec(),
+    ) {
+        // Convert the RgbaImage to a DynamicImage (required for saving as PNG)
+        let dynamic_img = DynamicImage::ImageRgba8(img);
+        dynamic_img.save(path)?;
+        Ok(())
+    } else {
+        let e = ImageError::Unsupported(UnsupportedError::from_format_and_kind(
+            ImageFormatHint::Name("".to_owned()),
+            UnsupportedErrorKind::GenericFeature("".to_owned()),
+        ));
+        Err(e)
+    }
 }

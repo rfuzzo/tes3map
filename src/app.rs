@@ -1,10 +1,7 @@
-use std::{collections::HashMap, env, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
-use egui::{pos2, reset_button, Color32, ColorImage, Pos2, Rect, Sense};
-use image::{
-    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
-    DynamicImage, ImageError, RgbaImage,
-};
+use egui::{reset_button, Color32, ColorImage, Pos2};
+
 use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture, Plugin};
 
 use crate::*;
@@ -14,39 +11,39 @@ use crate::*;
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct TemplateApp {
     #[serde(skip)]
-    cwd: Option<PathBuf>,
+    pub cwd: Option<PathBuf>,
 
     // tes3
     #[serde(skip)]
     landscape_records: HashMap<(i32, i32), Landscape>,
-
     #[serde(skip)]
     texture_map: HashMap<u32, ColorImage>,
 
     // painting
     #[serde(skip)]
-    dimensions: Dimensions,
+    pub dimensions: Dimensions,
     #[serde(skip)]
-    heights: Vec<f32>,
+    pub heights: Vec<f32>,
     #[serde(skip)]
     pixel_color: Vec<Color32>,
+
     #[serde(skip)]
-    background: Option<egui::TextureHandle>,
+    pub background: Option<egui::TextureHandle>,
     #[serde(skip)]
-    foreground: Option<egui::TextureHandle>,
+    pub foreground: Option<egui::TextureHandle>,
     #[serde(skip)]
-    textured: Option<egui::TextureHandle>,
+    pub textured: Option<egui::TextureHandle>,
 
     #[serde(skip)]
     data_files: Option<PathBuf>,
     #[serde(skip)]
-    info: String,
+    pub info: String,
 
     // ui
-    ui_data: SavedUiData,
+    pub ui_data: SavedUiData,
 
     #[serde(skip)]
-    zoom_data: ZoomData,
+    pub zoom_data: ZoomData,
 }
 
 impl TemplateApp {
@@ -68,6 +65,7 @@ impl TemplateApp {
     fn load_data(&mut self) -> Option<(ColorImage, ColorImage, ColorImage)> {
         self.background = None;
         self.foreground = None;
+        self.textured = None;
 
         // get dimensions
         let mut min_x: Option<i32> = None;
@@ -268,7 +266,7 @@ impl TemplateApp {
         self.pixel_color = color_map_to_pixels(d, color_map);
     }
 
-    fn load_folder(&mut self, path: &PathBuf, ctx: &egui::Context) {
+    pub fn load_folder(&mut self, path: &PathBuf, ctx: &egui::Context) {
         self.landscape_records.clear();
         self.texture_map.clear();
 
@@ -303,60 +301,7 @@ impl TemplateApp {
         }
     }
 
-    fn reset_zoom(&mut self) {
-        self.zoom_data.zoom = 1.0;
-    }
-
-    fn reset_pan(&mut self) {
-        self.zoom_data.drag_delta = None;
-        self.zoom_data.drag_offset = Pos2::default();
-        self.zoom_data.drag_start = Pos2::default();
-    }
-
-    /// Settings popup menu
-    pub(crate) fn options_ui(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            reset_button(ui, &mut self.ui_data);
-
-            if ui.button("Refresh image").clicked() {
-                let img = self.get_background();
-                let img2 = self.get_foreground();
-
-                // set handles
-                self.background =
-                    Some(ui.ctx().load_texture("background", img, Default::default()));
-                self.foreground = Some(ui.ctx().load_texture(
-                    "foreground",
-                    img2,
-                    Default::default(),
-                ));
-            }
-        });
-
-        ui.separator();
-        ui.label("Overlays");
-        ui.checkbox(&mut self.ui_data.overlay_terrain, "Show terrain map");
-        ui.checkbox(&mut self.ui_data.overlay_paths, "Show overlay map");
-        ui.checkbox(&mut self.ui_data.overlay_textures, "Show textures");
-
-        ui.separator();
-        ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");
-
-        ui.label("Color");
-        ui.add(egui::Slider::new(&mut self.ui_data.alpha, 0..=255).text("Alpha"));
-
-        ui.color_edit_button_srgba(&mut self.ui_data.height_base);
-        ui.add(
-            egui::Slider::new(&mut self.ui_data.height_spectrum, -360..=360).text("Height offset"),
-        );
-
-        ui.color_edit_button_srgba(&mut self.ui_data.depth_base);
-        ui.add(
-            egui::Slider::new(&mut self.ui_data.depth_spectrum, -360..=360).text("Depth offset"),
-        );
-    }
-
-    fn get_background(&mut self) -> ColorImage {
+    pub fn get_background(&mut self) -> ColorImage {
         create_image(
             &self.heights,
             self.dimensions.pixel_size_tuple(VERTEX_CNT),
@@ -365,7 +310,7 @@ impl TemplateApp {
         )
     }
 
-    fn get_foreground(&mut self) -> ColorImage {
+    pub fn get_foreground(&mut self) -> ColorImage {
         let mut img2 =
             ColorImage::new(self.dimensions.pixel_size_tuple(VERTEX_CNT), Color32::WHITE);
         self.color_pixels_reload();
@@ -373,7 +318,7 @@ impl TemplateApp {
         img2
     }
 
-    fn open_folder(&mut self, ctx: &egui::Context) {
+    pub fn open_folder(&mut self, ctx: &egui::Context) {
         let folder_option = rfd::FileDialog::new()
             .add_filter("esm", &["esm"])
             .add_filter("esp", &["esp"])
@@ -385,7 +330,7 @@ impl TemplateApp {
         }
     }
 
-    fn open_plugin(&mut self, ctx: &egui::Context) {
+    pub fn open_plugin(&mut self, ctx: &egui::Context) {
         let file_option = rfd::FileDialog::new()
             .add_filter("esm", &["esm"])
             .add_filter("esp", &["esp"])
@@ -398,6 +343,7 @@ impl TemplateApp {
 
             let mut plugin = Plugin::new();
             if plugin.load_path(&path).is_ok() {
+                // get data
                 self.landscape_records.clear();
                 self.texture_map.clear();
 
@@ -412,6 +358,7 @@ impl TemplateApp {
                     }
                 }
 
+                // get pictures
                 if let Some((back, fore, tex)) = self.load_data() {
                     let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
                         ctx.load_texture("background", back, Default::default())
@@ -429,7 +376,7 @@ impl TemplateApp {
         }
     }
 
-    fn get_layered_image(&mut self, img: ColorImage, img2: ColorImage) -> ColorImage {
+    pub fn get_layered_image(&mut self, img: ColorImage, img2: ColorImage) -> ColorImage {
         let mut layered = img.pixels.clone();
         for (i, color1) in img.pixels.iter().enumerate() {
             let color2 = img2.pixels[i];
@@ -485,9 +432,8 @@ impl TemplateApp {
                                             let stride = d.width() * CELL_SIZE;
                                             let i = (ty * stride) + tx;
 
-                                            let color = Color32::from_rgb(255, (gx * gy) as u8, 0);
                                             let index = (y * TEXTURE_SIZE) + x;
-                                            //let color = color_image.pixels[index];
+                                            let color = color_image.pixels[index];
                                             pixels_color[i] = color;
                                         }
                                     }
@@ -565,321 +511,60 @@ impl TemplateApp {
 
         None
     }
-}
 
-impl eframe::App for TemplateApp {
-    /// Called by the frame work to save state before shutdown.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
+    // UI methods
+
+    pub fn reset_zoom(&mut self) {
+        self.zoom_data.zoom = 1.0;
     }
 
-    /// Called each time the UI needs repainting, which may be many times per second.
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.cwd.is_none() {
-            if let Ok(cwd) = env::current_dir() {
-                // load once
-                self.cwd = Some(cwd.clone());
-                self.load_folder(&cwd, ctx);
-            }
-        }
-
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
-            egui::menu::bar(ui, |ui| {
-                ui.menu_button("File", |ui| {
-                    if ui.button("Load folder").clicked() {
-                        self.open_folder(ctx);
-                        ui.close_menu();
-                    }
-
-                    if ui.button("Load plugin").clicked() {
-                        self.open_plugin(ctx);
-                        ui.close_menu();
-                    }
-
-                    ui.separator();
-
-                    if ui.button("Quit").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                    }
-                });
-                ui.add_space(16.0);
-
-                egui::widgets::global_dark_light_mode_buttons(ui);
-            });
-        });
-
-        // egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
-        //     ui.heading("Cells");
-        //     ui.separator();
-        // });
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
-            ui.heading(format!(
-                "Map (y: [{},{}]; x: [{},{}]; z: [{},{}])",
-                self.dimensions.min_y,
-                self.dimensions.max_y,
-                self.dimensions.min_x,
-                self.dimensions.max_x,
-                self.dimensions.min_z,
-                self.dimensions.max_z
-            ));
-
-            ui.separator();
-
-            if self.heights.is_empty() {
-                // Default UI
-                ui.horizontal(|ui| {
-                    if ui.button("Load plugin").clicked() {
-                        self.open_plugin(ctx);
-                    }
-
-                    if ui.button("Load folder").clicked() {
-                        self.open_folder(ctx);
-                    }
-                });
-
-                // settings
-                egui::Frame::popup(ui.style())
-                    .stroke(egui::Stroke::NONE)
-                    .show(ui, |ui| {
-                        ui.set_max_width(170.0);
-                        egui::CollapsingHeader::new("Settings").show(ui, |ui| self.options_ui(ui));
-                    });
-
-                return;
-            }
-
-            // painter
-            // let clip_rect = ui.available_rect_before_wrap();
-            // let painter = egui::Painter::new(ui.ctx().clone(), ui.layer_id(), clip_rect);
-            // let response = painter.ctx();
-
-            let (response, painter) =
-                ui.allocate_painter(ui.available_size_before_wrap(), Sense::click_and_drag());
-
-            // panning and zooming
-            if let Some(delta) = self.zoom_data.drag_delta.take() {
-                self.zoom_data.drag_offset += delta.to_vec2();
-            }
-
-            // move to center zoom
-            if let Some(z) = self.zoom_data.zoom_delta.take() {
-                let r = z - 1.0;
-                self.zoom_data.zoom += r;
-
-                // TODO offset the image for smooth zoom
-                if let Some(pointer_pos) = response.hover_pos() {
-                    let d = pointer_pos * r;
-                    self.zoom_data.drag_offset -= d.to_vec2();
-                }
-            }
-
-            // TODO cut off pan at (0,0)
-            let min = self.zoom_data.drag_offset;
-            let max =
-                response.rect.max * self.zoom_data.zoom + self.zoom_data.drag_offset.to_vec2();
-            let canvas = Rect::from_min_max(min, max);
-            let uv = Rect::from_min_max(pos2(0.0, 0.0), Pos2::new(1.0, 1.0));
-
-            // transforms
-            let to = canvas;
-            let from = egui::Rect::from_min_max(
-                pos2(0.0, 0.0),
-                pos2(
-                    self.dimensions.width() as f32,
-                    self.dimensions.height() as f32,
-                ),
-            );
-            let to_screen = egui::emath::RectTransform::from_to(from, to);
-            let from_screen = to_screen.inverse();
-
-            // paint maps
-            if self.ui_data.overlay_terrain {
-                if let Some(texture) = &self.background {
-                    painter.image(texture.into(), canvas, uv, Color32::WHITE);
-                }
-            }
-            if self.ui_data.overlay_paths {
-                if let Some(texture) = &self.foreground {
-                    painter.image(texture.into(), canvas, uv, Color32::WHITE);
-                }
-            }
-            if self.ui_data.overlay_textures {
-                if let Some(texture) = &self.textured {
-                    painter.image(texture.into(), canvas, uv, Color32::WHITE);
-                }
-            }
-
-            // Responses
-
-            // hover
-            if let Some(pointer_pos) = response.hover_pos() {
-                let canvas_pos = from_screen * pointer_pos;
-
-                let canvas_pos_x = canvas_pos.x as usize;
-                let canvas_pos_y = canvas_pos.y as usize;
-                let i = ((canvas_pos_y * self.dimensions.width()) + canvas_pos_x) as usize;
-
-                if i < self.heights.len() {
-                    let value = self.heights[i];
-
-                    let x = canvas_pos.x as usize / VERTEX_CNT;
-                    let y = canvas_pos.y as usize / VERTEX_CNT;
-                    let cx = self.dimensions.tranform_to_cell_x(x as i32);
-                    let cy = self.dimensions.tranform_to_cell_y(y as i32);
-                    self.info = format!("({}, {}), height: {}", cx, cy, value);
-                }
-
-                if self.ui_data.show_tooltips {
-                    egui::show_tooltip(ui.ctx(), egui::Id::new("my_tooltip"), |ui| {
-                        ui.label(self.info.clone());
-                    });
-                }
-            }
-
-            // panning
-            if response.drag_started() {
-                if let Some(drag_start) = response.interact_pointer_pos() {
-                    self.zoom_data.drag_start = drag_start;
-                }
-            } else if response.dragged() {
-                if let Some(current_pos) = response.interact_pointer_pos() {
-                    let delta = current_pos - self.zoom_data.drag_start.to_vec2();
-                    self.zoom_data.drag_delta = Some(delta);
-                    self.zoom_data.drag_start = current_pos;
-                }
-            }
-
-            // zoom
-            let delta = ctx.input(|i| i.zoom_delta());
-            // let delta = response.input(|i| i.zoom_delta());
-            if delta != 1.0 {
-                self.zoom_data.zoom_delta = Some(delta);
-            }
-            if response.middle_clicked() {
-                self.reset_zoom();
-                self.reset_pan();
-            }
-
-            // Make sure we allocate what we used (everything)
-            ui.expand_to_include_rect(painter.clip_rect());
-
-            // settings
-            // TODO dumb hack
-            let settings_rect = egui::Rect::from_min_max(response.rect.min, pos2(0.0, 0.0));
-            ui.put(settings_rect, egui::Label::new(""));
-
-            egui::Frame::popup(ui.style())
-                .stroke(egui::Stroke::NONE)
-                .show(ui, |ui| {
-                    ui.set_max_width(270.0);
-                    egui::CollapsingHeader::new("Settings ").show(ui, |ui| self.options_ui(ui));
-                });
-
-            response.context_menu(|ui| {
-                if ui.button("Save as image").clicked() {
-                    let file_option = rfd::FileDialog::new()
-                        .add_filter("png", &["png"])
-                        .save_file();
-
-                    if let Some(original_path) = file_option {
-                        // combined
-                        let img = self.get_background();
-                        let img2 = self.get_foreground();
-                        let layered_img = self.get_layered_image(img, img2);
-                        match save_image(original_path, &layered_img) {
-                            Ok(_) => {}
-                            Err(e) => println!("{}", e),
-                        }
-                    }
-
-                    ui.close_menu();
-                }
-
-                if ui.button("Save as layers").clicked() {
-                    let file_option = rfd::FileDialog::new()
-                        .add_filter("png", &["png"])
-                        .save_file();
-
-                    if let Some(original_path) = file_option {
-                        // save layers
-                        let img = self.get_background();
-                        let mut new_path = append_number_to_filename(&original_path, 1);
-                        match save_image(new_path, &img) {
-                            Ok(_) => {}
-                            Err(e) => println!("{}", e),
-                        }
-
-                        let img2 = self.get_foreground();
-                        new_path = append_number_to_filename(&original_path, 2);
-                        match save_image(new_path, &img2) {
-                            Ok(_) => {}
-                            Err(e) => println!("{}", e),
-                        }
-
-                        // combined
-                        let layered_img = self.get_layered_image(img, img2);
-                        match save_image(original_path, &layered_img) {
-                            Ok(_) => {}
-                            Err(e) => println!("{}", e),
-                        }
-                    }
-
-                    ui.close_menu();
-                }
-            });
-        });
+    pub fn reset_pan(&mut self) {
+        self.zoom_data.drag_delta = None;
+        self.zoom_data.drag_offset = Pos2::default();
+        self.zoom_data.drag_start = Pos2::default();
     }
-}
 
-fn overlay_colors(
-    color1: (u8, u8, u8),
-    alpha1: f32,
-    color2: (u8, u8, u8),
-    alpha2: f32,
-) -> (u8, u8, u8, u8) {
-    let r = ((1.0 - alpha2) * (alpha1 * color1.0 as f32 + alpha2 * color2.0 as f32)) as u8;
-    let g = ((1.0 - alpha2) * (alpha1 * color1.1 as f32 + alpha2 * color2.1 as f32)) as u8;
-    let b = ((1.0 - alpha2) * (alpha1 * color1.2 as f32 + alpha2 * color2.2 as f32)) as u8;
-    let a = alpha1 * 255.0; // TODO HACK
+    /// Settings popup menu
+    pub(crate) fn options_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            reset_button(ui, &mut self.ui_data);
 
-    (r, g, b, a as u8)
-}
+            if ui.button("Refresh image").clicked() {
+                let img = self.get_background();
+                let img2 = self.get_foreground();
 
-fn append_number_to_filename(path: &Path, number: usize) -> PathBuf {
-    // Get the stem (filename without extension) and extension from the original path
-    let stem = path.file_stem().unwrap().to_str().unwrap();
-    let extension = path.extension().map_or("", |ext| ext.to_str().unwrap());
+                // set handles
+                self.background =
+                    Some(ui.ctx().load_texture("background", img, Default::default()));
+                self.foreground = Some(ui.ctx().load_texture(
+                    "foreground",
+                    img2,
+                    Default::default(),
+                ));
+            }
+        });
 
-    // Append a number to the stem (filename)
-    let new_stem = format!("{}_{}", stem, number);
+        ui.separator();
+        ui.label("Overlays");
+        ui.checkbox(&mut self.ui_data.overlay_terrain, "Show terrain map");
+        ui.checkbox(&mut self.ui_data.overlay_textures, "Show textures");
 
-    // Create a new PathBuf with the modified stem and the same extension
-    PathBuf::from(path.parent().unwrap()).join(format!("{}.{}", new_stem, extension))
-}
+        ui.checkbox(&mut self.ui_data.overlay_paths, "Show overlay map");
 
-fn save_image(path: PathBuf, color_image: &ColorImage) -> Result<(), image::ImageError> {
-    // get image
+        ui.separator();
+        ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");
 
-    let pixels = color_image.as_raw();
+        ui.label("Color");
+        ui.add(egui::Slider::new(&mut self.ui_data.alpha, 0..=255).text("Alpha"));
 
-    // Create an RgbaImage from the raw pixel data
-    if let Some(img) = RgbaImage::from_raw(
-        color_image.width() as u32,
-        color_image.height() as u32,
-        pixels.to_vec(),
-    ) {
-        // Convert the RgbaImage to a DynamicImage (required for saving as PNG)
-        let dynamic_img = DynamicImage::ImageRgba8(img);
-        dynamic_img.save(path)?;
-        Ok(())
-    } else {
-        let e = ImageError::Unsupported(UnsupportedError::from_format_and_kind(
-            ImageFormatHint::Name("".to_owned()),
-            UnsupportedErrorKind::GenericFeature("".to_owned()),
-        ));
-        Err(e)
+        ui.color_edit_button_srgba(&mut self.ui_data.height_base);
+        ui.add(
+            egui::Slider::new(&mut self.ui_data.height_spectrum, -360..=360).text("Height offset"),
+        );
+
+        ui.color_edit_button_srgba(&mut self.ui_data.depth_base);
+        ui.add(
+            egui::Slider::new(&mut self.ui_data.depth_spectrum, -360..=360).text("Depth offset"),
+        );
     }
 }
