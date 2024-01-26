@@ -259,11 +259,16 @@ impl TemplateApp {
     }
 
     pub fn get_layered_image(&mut self, img: ColorImage, img2: ColorImage) -> ColorImage {
+        // base image
         let mut layered = img.pixels.clone();
+
+        // overlay second image
         for (i, color1) in img.pixels.into_iter().enumerate() {
             let color2 = img2.pixels[i];
             layered[i] = overlay_colors(color1, color2);
         }
+
+        // create new colorImage
         let mut layered_img = ColorImage::new(
             self.dimensions.pixel_size_tuple(VERTEX_CNT),
             Color32::TRANSPARENT,
@@ -402,10 +407,6 @@ impl TemplateApp {
             };
 
             let size = [image.width() as _, image.height() as _];
-            // if size != [TEXTURE_SIZE as usize, TEXTURE_SIZE as usize] {
-            //     return None;
-            // }
-
             let image_buffer = image.to_rgba8();
             let pixels = image_buffer.as_flat_samples();
             return Some(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()));
@@ -450,7 +451,7 @@ impl TemplateApp {
 
     pub fn height_from_screen_space(&self, x: usize, y: usize) -> Option<f32> {
         let i = (y * self.dimensions.stride(VERTEX_CNT)) + x;
-        self.heights.get(i as usize).copied()
+        self.heights.get(i).copied()
     }
 
     // UI methods

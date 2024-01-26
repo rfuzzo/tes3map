@@ -20,7 +20,7 @@ use image::{
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
-const TEXTURE_MIN_SIZE: usize = 8;
+const TEXTURE_MIN_SIZE: usize = 16;
 const TEXTURE_MAX_SIZE: usize = 256;
 const GRID_SIZE: usize = 16;
 
@@ -407,19 +407,19 @@ fn overlay_colors_with_alpha(color1: Color32, color2: Color32, alpha1: f32) -> C
     Color32::from_rgba_premultiplied(r, g, b, 255)
 }
 
-fn append_number_to_filename(path: &Path, number: usize) -> PathBuf {
+fn append_to_filename(path: &Path, suffix: &str) -> PathBuf {
     // Get the stem (filename without extension) and extension from the original path
     let stem = path.file_stem().unwrap().to_str().unwrap();
     let extension = path.extension().map_or("", |ext| ext.to_str().unwrap());
 
     // Append a number to the stem (filename)
-    let new_stem = format!("{}_{}", stem, number);
+    let new_stem = format!("{}_{}", stem, suffix);
 
     // Create a new PathBuf with the modified stem and the same extension
     PathBuf::from(path.parent().unwrap()).join(format!("{}.{}", new_stem, extension))
 }
 
-fn save_image(path: PathBuf, color_image: &ColorImage) -> Result<(), image::ImageError> {
+fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), image::ImageError> {
     // get image
 
     let pixels = color_image.as_raw();

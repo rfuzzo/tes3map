@@ -12,6 +12,7 @@ impl eframe::App for TemplateApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // on start, we check the current folder for esps
         if self.cwd.is_none() {
             if let Ok(cwd) = env::current_dir() {
                 // load once
@@ -265,45 +266,129 @@ impl eframe::App for TemplateApp {
                         .save_file();
 
                     if let Some(original_path) = file_option {
-                        // combined
-                        let img = self.get_background();
-                        let img2 = self.get_foreground();
-                        let layered_img = self.get_layered_image(img, img2);
-                        match save_image(original_path, &layered_img) {
-                            Ok(_) => {}
-                            Err(e) => println!("{}", e),
+                        // logic here:
+                        // if textures is selected, we just save that
+                        if self.ui_data.overlay_textures {
+                            let image = self.get_textured();
+                            if let Err(e) = save_image(&original_path, &image) {
+                                println!("{}", e)
+                            }
+                        } else {
+                            // else we save the current overlayed image
+                            if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
+                                let background = self.get_background();
+                                let foreground = self.get_foreground();
+
+                                let layered_img = self.get_layered_image(background, foreground);
+                                if let Err(e) = save_image(&original_path, &layered_img) {
+                                    println!("{}", e)
+                                }
+                            } else if self.ui_data.overlay_terrain {
+                                // only save terrain
+                                let background = self.get_background();
+                                if let Err(e) = save_image(&original_path, &background) {
+                                    println!("{}", e)
+                                }
+                            } else if self.ui_data.overlay_paths {
+                                // only save overlay
+                                let foreground = self.get_foreground();
+                                if let Err(e) = save_image(&original_path, &foreground) {
+                                    println!("{}", e)
+                                }
+                            }
                         }
                     }
 
                     ui.close_menu();
                 }
 
-                if ui.button("Save as layers").clicked() {
+                if ui.button("Save active layers").clicked() {
                     let file_option = rfd::FileDialog::new()
                         .add_filter("png", &["png"])
                         .save_file();
 
                     if let Some(original_path) = file_option {
                         // save layers
-                        let img = self.get_background();
-                        let mut new_path = append_number_to_filename(&original_path, 1);
-                        match save_image(new_path, &img) {
-                            Ok(_) => {}
-                            Err(e) => println!("{}", e),
-                        }
+                        if self.ui_data.overlay_textures {
+                            // if textures is selected, save them to layer and main image
+                            let img = self.get_textured();
+                            if let Err(e) = save_image(&original_path, &img) {
+                                println!("{}", e)
+                            }
 
-                        let img2 = self.get_foreground();
-                        new_path = append_number_to_filename(&original_path, 2);
-                        match save_image(new_path, &img2) {
-                            Ok(_) => {}
-                            Err(e) => println!("{}", e),
-                        }
+                            if let Err(e) =
+                                save_image(&append_to_filename(&original_path, "t"), &img)
+                            {
+                                println!("{}", e)
+                            }
 
-                        // combined
-                        let layered_img = self.get_layered_image(img, img2);
-                        match save_image(original_path, &layered_img) {
-                            Ok(_) => {}
-                            Err(e) => println!("{}", e),
+                            if self.ui_data.overlay_terrain {
+                                // if only terrain is selected
+                                let img = self.get_background();
+                                if let Err(e) =
+                                    save_image(&append_to_filename(&original_path, "b"), &img)
+                                {
+                                    println!("{}", e)
+                                }
+                            }
+
+                            if self.ui_data.overlay_paths {
+                                // if only paths is selected
+                                let img = self.get_foreground();
+                                if let Err(e) =
+                                    save_image(&append_to_filename(&original_path, "f"), &img)
+                                {
+                                    println!("{}", e)
+                                }
+                            }
+                        } else if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
+                            let img = self.get_background();
+                            if let Err(e) =
+                                save_image(&append_to_filename(&original_path, "b"), &img)
+                            {
+                                println!("{}", e)
+                            }
+
+                            let img2 = self.get_foreground();
+                            if let Err(e) =
+                                save_image(&append_to_filename(&original_path, "f"), &img2)
+                            {
+                                println!("{}", e)
+                            }
+
+                            // save combined to main image
+                            if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
+                                let layered_img = self.get_layered_image(img, img2);
+                                if let Err(e) = save_image(&original_path, &layered_img) {
+                                    println!("{}", e)
+                                }
+                            }
+                        } else if self.ui_data.overlay_terrain {
+                            // if only terrain is selected
+                            let img = self.get_background();
+                            if let Err(e) =
+                                save_image(&append_to_filename(&original_path, "b"), &img)
+                            {
+                                println!("{}", e)
+                            }
+
+                            // save main
+                            if let Err(e) = save_image(&original_path, &img) {
+                                println!("{}", e)
+                            }
+                        } else if self.ui_data.overlay_paths {
+                            // if only paths is selected
+                            let img = self.get_foreground();
+                            if let Err(e) =
+                                save_image(&append_to_filename(&original_path, "f"), &img)
+                            {
+                                println!("{}", e)
+                            }
+
+                            // save f as main
+                            if let Err(e) = save_image(&original_path, &img) {
+                                println!("{}", e)
+                            }
                         }
                     }
 
