@@ -47,7 +47,7 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        egui::SidePanel::left("my_left_panel").show(ctx, |ui| {
+        egui::SidePanel::right("cell_panel").show(ctx, |ui| {
             ui.heading("Cells");
             if ui.button("Paint all").clicked() {
                 // paint all
@@ -134,43 +134,50 @@ impl eframe::App for TemplateApp {
             let (response, painter) =
                 ui.allocate_painter(ui.available_size_before_wrap(), Sense::click_and_drag());
 
-            // panning and zooming
+            // zoom
             if let Some(delta) = self.zoom_data.drag_delta.take() {
                 self.zoom_data.drag_offset += delta.to_vec2();
             }
 
-            // move to center zoom
             if let Some(z) = self.zoom_data.zoom_delta.take() {
                 let r = z - 1.0;
-                self.zoom_data.zoom += r;
+                let mut current_zoom = self.zoom_data.zoom;
+                current_zoom += r;
+                if current_zoom > 0.0 {
+                    self.zoom_data.zoom = current_zoom;
 
-                // TODO offset the image for smooth zoom
-                if let Some(pointer_pos) = response.hover_pos() {
-                    let d = pointer_pos * r;
-                    self.zoom_data.drag_offset -= d.to_vec2();
+                    // TODO offset the image for smooth zoom
+                    if let Some(pointer_pos) = response.hover_pos() {
+                        let d = pointer_pos * r;
+                        self.zoom_data.drag_offset -= d.to_vec2();
+                    }
                 }
             }
 
             // TODO cut off pan at (0,0)
+
+            let pixel_width = self.dimensions.width() as f32 * self.dimensions.cell_size() as f32;
+            let pixel_height = self.dimensions.height() as f32 * self.dimensions.cell_size() as f32;
+            // zoomed and panned canvas
             let min = self.zoom_data.drag_offset;
             let max =
                 response.rect.max * self.zoom_data.zoom + self.zoom_data.drag_offset.to_vec2();
             let canvas = Rect::from_min_max(min, max);
-            let uv = Rect::from_min_max(pos2(0.0, 0.0), Pos2::new(1.0, 1.0));
 
             // transforms
+
             let to = canvas;
-            let from: Rect = egui::Rect::from_min_max(
-                pos2(0.0, 0.0),
-                pos2(
-                    self.dimensions.width() as f32 * VERTEX_CNT as f32,
-                    self.dimensions.height() as f32 * VERTEX_CNT as f32,
-                ),
-            );
+            let from: Rect =
+                egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
             let to_screen = egui::emath::RectTransform::from_to(from, to);
             let from_screen = to_screen.inverse();
 
             // paint maps
+            let uv = Rect::from_min_max(pos2(0.0, 0.0), Pos2::new(1.0, 1.0));
+            // let rx = (response.rect.max.x - response.rect.min.x) / pixel_width;
+            // let ry = (response.rect.max.y - response.rect.min.y) / pixel_height;
+            // let uv = Rect::from_min_max(pos2(0.0, 0.0), Pos2::new(rx, ry));
+
             if self.ui_data.overlay_terrain {
                 if let Some(texture) = &self.background {
                     painter.image(texture.into(), canvas, uv, Color32::WHITE);

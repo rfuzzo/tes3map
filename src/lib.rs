@@ -20,7 +20,7 @@ use image::{
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
-const TEXTURE_MIN_SIZE: usize = 16;
+const TEXTURE_MIN_SIZE: usize = 2;
 const TEXTURE_MAX_SIZE: usize = 256;
 const GRID_SIZE: usize = 16;
 
