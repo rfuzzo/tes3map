@@ -20,12 +20,14 @@ use image::{
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
-const TEXTURE_MIN_SIZE: usize = 2;
+const TEXTURE_MIN_SIZE: usize = 16;
 const TEXTURE_MAX_SIZE: usize = 256;
 const GRID_SIZE: usize = 16;
 
 const VERTEX_CNT: usize = 65;
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
+
+type CellKey = (i32, i32);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct SavedUiData {
@@ -280,7 +282,7 @@ fn depth_to_color(depth: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> 
 
 fn color_map_to_pixels(
     dimensions: Dimensions,
-    color_map: HashMap<(i32, i32), [[Color32; 65]; 65]>,
+    color_map: HashMap<CellKey, [[Color32; 65]; 65]>,
 ) -> Vec<Color32> {
     // dimensions
     let max_x = dimensions.max_x;
@@ -329,7 +331,7 @@ fn color_map_to_pixels(
 fn height_map_to_pixel_heights(
     dimensions: Dimensions,
     dimensions_z: DimensionsZ,
-    heights_map: HashMap<(i32, i32), [[f32; 65]; 65]>,
+    heights_map: HashMap<CellKey, [[f32; 65]; 65]>,
 ) -> Vec<f32> {
     // dimensions
     let max_x = dimensions.max_x;
@@ -443,7 +445,9 @@ fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), image::ImageE
     }
 }
 
-fn calculate_dimensions(landscape_records: &HashMap<(i32, i32), Landscape>) -> Option<Dimensions> {
+fn calculate_dimensions(
+    landscape_records: &HashMap<CellKey, (u64, Landscape)>,
+) -> Option<Dimensions> {
     let mut min_x: Option<i32> = None;
     let mut min_y: Option<i32> = None;
     let mut max_x: Option<i32> = None;
@@ -499,16 +503,16 @@ fn calculate_dimensions(landscape_records: &HashMap<(i32, i32), Landscape>) -> O
 }
 
 fn calculate_heights(
-    landscape_records: &HashMap<(i32, i32), Landscape>,
+    landscape_records: &HashMap<CellKey, (u64, Landscape)>,
     dimensions: Dimensions,
 ) -> Option<(Vec<f32>, DimensionsZ)> {
     let mut min_z: Option<f32> = None;
     let mut max_z: Option<f32> = None;
-    let mut heights_map: HashMap<(i32, i32), [[f32; 65]; 65]> = HashMap::default();
+    let mut heights_map: HashMap<CellKey, [[f32; 65]; 65]> = HashMap::default();
 
     for cy in dimensions.min_y..dimensions.max_y + 1 {
         for cx in dimensions.min_x..dimensions.max_x + 1 {
-            if let Some(landscape) = landscape_records.get(&(cx, cy)) {
+            if let Some((_hash, landscape)) = landscape_records.get(&(cx, cy)) {
                 if landscape
                     .landscape_flags
                     .contains(LandscapeFlags::USES_VERTEX_HEIGHTS_AND_NORMALS)

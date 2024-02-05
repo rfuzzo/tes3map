@@ -2,6 +2,8 @@ use std::{collections::HashMap, path::PathBuf};
 
 use egui::{reset_button, Color32, ColorImage, Pos2};
 
+use log::{info, warn};
+use seahash::hash;
 use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture, Plugin};
 
 use crate::*;
@@ -15,9 +17,9 @@ pub struct TemplateApp {
 
     // tes3
     #[serde(skip)]
-    pub landscape_records: HashMap<(i32, i32), Landscape>,
+    pub landscape_records: HashMap<CellKey, (u64, Landscape)>,
     #[serde(skip)]
-    texture_map: HashMap<u32, ColorImage>,
+    texture_map: HashMap<(u64, u32), ColorImage>,
 
     // painting
     #[serde(skip)]
@@ -134,12 +136,12 @@ impl TemplateApp {
     }
 
     fn color_pixels_reload(&mut self) {
-        let mut color_map: HashMap<(i32, i32), [[Color32; 65]; 65]> = HashMap::default();
+        let mut color_map: HashMap<CellKey, [[Color32; 65]; 65]> = HashMap::default();
         let d = self.dimensions;
 
         for cy in d.min_y..d.max_y + 1 {
             for cx in d.min_x..d.max_x + 1 {
-                if let Some(landscape) = self.landscape_records.get(&(cx, cy)) {
+                if let Some((_hash, landscape)) = self.landscape_records.get(&(cx, cy)) {
                     // get color data
                     let mut colors: [[Color32; 65]; 65] =
                         [[Color32::TRANSPARENT; VERTEX_CNT]; VERTEX_CNT];
@@ -184,17 +186,32 @@ impl TemplateApp {
         self.landscape_records.clear();
         self.texture_map.clear();
 
+        info!("== loading folder {}", path.display());
+
         for path in get_plugins_sorted(&path, false) {
             let mut plugin = Plugin::new();
             if plugin.load_path(&path).is_ok() {
-                for r in plugin.objects_of_type::<Landscape>() {
-                    let key = r.grid;
-                    self.landscape_records.insert(key, r.clone());
+                let hash = hash(path.to_str().unwrap_or_default().as_bytes());
+                info!("\t== loading plugin {} with hash {}", path.display(), hash);
+
+                for landscape in plugin.objects_of_type::<Landscape>() {
+                    let key = landscape.grid;
+                    self.landscape_records
+                        .insert(key, (hash, landscape.clone()));
                 }
+
                 for r in plugin.into_objects_of_type::<LandscapeTexture>() {
                     let key = r.index;
                     if let Some(image) = self.load_texture(&r) {
-                        self.texture_map.insert(key, image);
+                        self.texture_map.insert((hash, key), image);
+                        info!(
+                            "\t\tinserting texture [{:?}] {} ({})",
+                            (hash, key),
+                            r.file_name,
+                            r.id
+                        );
+                    } else {
+                        warn!("\t\tmissing texture [{:?}] {}", (hash, key), r.file_name)
                     }
                 }
             }
@@ -226,6 +243,9 @@ impl TemplateApp {
                 self.data_files = Some(PathBuf::from(dir_path));
             }
 
+            let hash = hash(path.to_str().unwrap_or_default().as_bytes());
+            info!("\t== loading plugin {} with hash {}", path.display(), hash);
+
             let mut plugin = Plugin::new();
             if plugin.load_path(&path).is_ok() {
                 // get data
@@ -234,23 +254,18 @@ impl TemplateApp {
 
                 for r in plugin.objects_of_type::<Landscape>() {
                     let key = r.grid;
-                    self.landscape_records.insert(key, r.clone());
+                    self.landscape_records.insert(key, (hash, r.clone()));
                 }
-                // let mut missing_textures = vec![];
+
                 for r in plugin.into_objects_of_type::<LandscapeTexture>() {
                     let key = r.index;
                     if let Some(image) = self.load_texture(&r) {
-                        self.texture_map.insert(key, image);
+                        self.texture_map.insert((hash, key), image);
+                        info!("\tinserting texture [{:?}] {}", (hash, key), r.file_name);
+                    } else {
+                        warn!("\tmissing texture [{:?}] {}", (hash, key), r.file_name)
                     }
-                    //  else if !missing_textures.contains(&r.file_name) {
-                    //     missing_textures.push(r.file_name);
-                    // }
                 }
-                // if let Ok(json) = serde_json::to_string_pretty(&missing_textures) {
-                //     if let Ok(mut fs) = fs::File::create("missing_textures.json") {
-                //         let _ = fs.write_all(json.as_bytes());
-                //     }
-                // }
 
                 // get pictures
                 self.load_data(ctx);
@@ -285,7 +300,7 @@ impl TemplateApp {
 
         for cy in d.min_y..d.max_y + 1 {
             for cx in d.min_x..d.max_x + 1 {
-                if let Some(landscape) = self.landscape_records.get(&(cx, cy)) {
+                if let Some((hash, landscape)) = self.landscape_records.get(&(cx, cy)) {
                     if landscape
                         .landscape_flags
                         .contains(LandscapeFlags::USES_TEXTURES)
@@ -298,7 +313,8 @@ impl TemplateApp {
                                     let dy = (4 * (gy / 4)) + (gx / 4);
 
                                     let key = data[dy][dx] as u32;
-                                    let Some(color_image) = self.texture_map.get(&key) else {
+                                    let Some(color_image) = self.texture_map.get(&(*hash, key))
+                                    else {
                                         continue;
                                     };
 
@@ -329,9 +345,6 @@ impl TemplateApp {
                                                 self.height_from_screen_space(screenx, screeny)
                                             {
                                                 if height < 0_f32 {
-                                                    // let a = (1.0
-                                                    //     - (height / self.dimensions_z.min_z))
-                                                    //     .clamp(0.0, 1.0);
                                                     let a = 0.5;
 
                                                     color = overlay_colors_with_alpha(

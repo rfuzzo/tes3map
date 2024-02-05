@@ -73,7 +73,7 @@ impl eframe::App for TemplateApp {
                                         if let Some(v) = self.landscape_records.get(&(x, y)) {
                                             if ui.button(format!("({x},{y})")).clicked() {
                                                 // store
-                                                self.current_landscape = Some(v.clone());
+                                                self.current_landscape = Some(v.1.clone());
 
                                                 let dimensions = Dimensions {
                                                     min_x: x,
