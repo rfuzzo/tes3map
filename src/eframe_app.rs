@@ -41,6 +41,16 @@ impl eframe::App for TemplateApp {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
+
+                ui.menu_button("Help", |ui| {
+                    if ui
+                        .hyperlink_to("Github repo", "https://github.com/rfuzzo/tes3map")
+                        .clicked()
+                    {
+                        ui.close_menu();
+                    }
+                });
+
                 ui.add_space(16.0);
 
                 egui::widgets::global_dark_light_mode_buttons(ui);
@@ -59,7 +69,9 @@ impl eframe::App for TemplateApp {
             egui::ScrollArea::vertical()
                 .auto_shrink([false; 2])
                 .show(ui, |ui| {
-                    if let Some(d) = calculate_dimensions(&self.landscape_records) {
+                    if let Some(d) =
+                        calculate_dimensions(&self.landscape_records, self.ui_data.texture_size)
+                    {
                         for y in (d.min_y..=d.max_y).rev() {
                             let mut any = false;
                             for x in d.min_x..=d.max_x {
@@ -124,7 +136,7 @@ impl eframe::App for TemplateApp {
                     .stroke(egui::Stroke::NONE)
                     .show(ui, |ui| {
                         ui.set_max_width(170.0);
-                        egui::CollapsingHeader::new("Settings").show(ui, |ui| self.options_ui(ui));
+                        egui::CollapsingHeader::new("Settings").show(ui, |ui| self.settings_ui(ui));
                     });
 
                 return;
@@ -255,7 +267,7 @@ impl eframe::App for TemplateApp {
                 .stroke(egui::Stroke::NONE)
                 .show(ui, |ui| {
                     ui.set_max_width(270.0);
-                    egui::CollapsingHeader::new("Settings ").show(ui, |ui| self.options_ui(ui));
+                    egui::CollapsingHeader::new("Settings ").show(ui, |ui| self.settings_ui(ui));
                 });
 
             response.context_menu(|ui| {

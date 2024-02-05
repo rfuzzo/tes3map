@@ -1,10 +1,22 @@
 #![warn(clippy::all, rust_2018_idioms)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const NAME: &str = env!("CARGO_PKG_NAME");
+
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
-    pretty_env_logger::init();
+    use log::{warn, LevelFilter};
+
+    let log_path = format!("{}.log", NAME);
+    let log_level = if cfg!(debug_assertions) {
+        LevelFilter::Info
+    } else {
+        LevelFilter::Warn
+    };
+    let _ = simple_logging::log_to_file(log_path, log_level);
+    warn!("{} v{}", NAME, VERSION);
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

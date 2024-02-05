@@ -20,7 +20,6 @@ use image::{
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use serde::{Deserialize, Serialize};
 
-const TEXTURE_MIN_SIZE: usize = 16;
 const TEXTURE_MAX_SIZE: usize = 256;
 const GRID_SIZE: usize = 16;
 
@@ -43,6 +42,8 @@ pub struct SavedUiData {
     pub overlay_paths: bool,
     pub overlay_textures: bool,
     pub show_tooltips: bool,
+
+    pub texture_size: usize,
 }
 
 impl Default for SavedUiData {
@@ -62,6 +63,8 @@ impl Default for SavedUiData {
             overlay_paths: true,
             overlay_textures: false,
             show_tooltips: false,
+
+            texture_size: 16,
         }
     }
 }
@@ -83,7 +86,7 @@ impl Default for Dimensions {
             min_y: Default::default(),
             max_x: Default::default(),
             max_y: Default::default(),
-            texture_size: 32,
+            texture_size: 16,
         }
     }
 }
@@ -447,6 +450,7 @@ fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), image::ImageE
 
 fn calculate_dimensions(
     landscape_records: &HashMap<CellKey, (u64, Landscape)>,
+    texture_size: usize,
 ) -> Option<Dimensions> {
     let mut min_x: Option<i32> = None;
     let mut min_y: Option<i32> = None;
@@ -497,7 +501,7 @@ fn calculate_dimensions(
         min_y,
         max_x,
         max_y,
-        texture_size: TEXTURE_MIN_SIZE,
+        texture_size,
     };
     Some(dimensions)
 }

@@ -74,7 +74,9 @@ impl TemplateApp {
         self.textured = None;
 
         // calculate dimensions
-        if let Some(dimensions) = calculate_dimensions(&self.landscape_records) {
+        if let Some(dimensions) =
+            calculate_dimensions(&self.landscape_records, self.ui_data.texture_size)
+        {
             self.dimensions = dimensions;
 
             // calculate heights
@@ -295,6 +297,13 @@ impl TemplateApp {
     fn get_textured_pixels(&self) -> Option<ColorImage> {
         let d = self.dimensions;
         let size = d.pixel_size(d.cell_size());
+        let size_tuple = d.pixel_size_tuple(d.cell_size());
+
+        info!(
+            "Generating textured image with size {} (width: {}, height: {})",
+            size, size_tuple[0], size_tuple[1],
+        );
+
         let mut pixels_color = vec![Color32::TRANSPARENT; size];
         let texture_size = d.texture_size;
 
@@ -480,13 +489,16 @@ impl TemplateApp {
     }
 
     /// Settings popup menu
-    pub(crate) fn options_ui(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn settings_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             reset_button(ui, &mut self.ui_data);
 
             if ui.button("Refresh image").clicked() {
+                self.dimensions.texture_size = self.ui_data.texture_size;
+
                 let img = self.get_background();
                 let img2 = self.get_foreground();
+                let img3 = self.get_textured();
 
                 // set handles
                 self.background =
@@ -496,6 +508,8 @@ impl TemplateApp {
                     img2,
                     Default::default(),
                 ));
+
+                self.textured = Some(ui.ctx().load_texture("textured", img3, Default::default()));
             }
         });
 
@@ -521,5 +535,16 @@ impl TemplateApp {
         ui.add(
             egui::Slider::new(&mut self.ui_data.depth_spectrum, -360..=360).text("Depth offset"),
         );
+
+        ui.separator();
+
+        ui.add(
+            egui::Slider::new(&mut self.ui_data.texture_size, 2..=200).text("Texture Resolution"),
+        );
+
+        ui.separator();
+
+        ui.label("zoom with Ctrl + Mousewheel");
+        ui.label("reset with middle mouse button");
     }
 }
