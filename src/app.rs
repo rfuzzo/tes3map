@@ -539,8 +539,11 @@ impl TemplateApp {
         ui.separator();
 
         ui.add(
-            egui::Slider::new(&mut self.ui_data.texture_size, 2..=200).text("Texture Resolution"),
+            egui::Slider::new(&mut self.ui_data.texture_size, 2..=255)
+                .step_by(1.0)
+                .text("Texture Resolution"),
         );
+        self.dimensions.texture_size = self.ui_data.texture_size;
 
         ui.separator();
 
