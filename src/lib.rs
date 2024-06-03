@@ -18,7 +18,6 @@ use image::{
     DynamicImage, ImageError, RgbaImage,
 };
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
-use serde::{Deserialize, Serialize};
 
 const TEXTURE_MAX_SIZE: usize = 256;
 const GRID_SIZE: usize = 16;
@@ -28,7 +27,7 @@ const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
 
 type CellKey = (i32, i32);
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SavedUiData {
     pub depth_spectrum: i32,
     pub depth_base: Color32,
@@ -69,7 +68,7 @@ impl Default for SavedUiData {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Dimensions {
     pub min_x: i32,
     pub min_y: i32,
@@ -332,7 +331,7 @@ fn color_map_to_pixels(
 }
 
 fn height_map_to_pixel_heights(
-    dimensions: Dimensions,
+    dimensions: &Dimensions,
     dimensions_z: DimensionsZ,
     heights_map: HashMap<CellKey, [[f32; 65]; 65]>,
 ) -> Vec<f32> {
@@ -508,7 +507,7 @@ fn calculate_dimensions(
 
 fn calculate_heights(
     landscape_records: &HashMap<CellKey, (u64, Landscape)>,
-    dimensions: Dimensions,
+    dimensions: &Dimensions,
 ) -> Option<(Vec<f32>, DimensionsZ)> {
     let mut min_z: Option<f32> = None;
     let mut max_z: Option<f32> = None;

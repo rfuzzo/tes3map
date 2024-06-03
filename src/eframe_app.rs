@@ -6,9 +6,9 @@ use egui::{pos2, Color32, Pos2, Rect, Sense};
 
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
-    }
+    // fn save(&mut self, storage: &mut dyn eframe::Storage) {
+    //     eframe::set_value(storage, eframe::APP_KEY, self);
+    // }
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -136,7 +136,8 @@ impl eframe::App for TemplateApp {
                     .stroke(egui::Stroke::NONE)
                     .show(ui, |ui| {
                         ui.set_max_width(170.0);
-                        egui::CollapsingHeader::new("Settings").show(ui, |ui| self.settings_ui(ui));
+                        egui::CollapsingHeader::new("Settings")
+                            .show(ui, |ui| self.settings_ui(ui, ctx));
                     });
 
                 return;
@@ -167,9 +168,6 @@ impl eframe::App for TemplateApp {
             }
 
             // TODO cut off pan at (0,0)
-
-            let pixel_width = self.dimensions.width() as f32 * self.dimensions.cell_size() as f32;
-            let pixel_height = self.dimensions.height() as f32 * self.dimensions.cell_size() as f32;
             // zoomed and panned canvas
             let min = self.zoom_data.drag_offset;
             let max =
@@ -177,7 +175,8 @@ impl eframe::App for TemplateApp {
             let canvas = Rect::from_min_max(min, max);
 
             // transforms
-
+            let pixel_width = self.dimensions.width() as f32 * self.dimensions.cell_size() as f32;
+            let pixel_height = self.dimensions.height() as f32 * self.dimensions.cell_size() as f32;
             let to = canvas;
             let from: Rect =
                 egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
@@ -267,7 +266,8 @@ impl eframe::App for TemplateApp {
                 .stroke(egui::Stroke::NONE)
                 .show(ui, |ui| {
                     ui.set_max_width(270.0);
-                    egui::CollapsingHeader::new("Settings ").show(ui, |ui| self.settings_ui(ui));
+                    egui::CollapsingHeader::new("Settings ")
+                        .show(ui, |ui| self.settings_ui(ui, ctx));
                 });
 
             response.context_menu(|ui| {
@@ -288,7 +288,8 @@ impl eframe::App for TemplateApp {
                         // logic here:
                         // if textures is selected, we just save that
                         if self.ui_data.overlay_textures {
-                            let image = self.get_textured();
+                            let max_texture_side = ctx.input(|i| i.max_texture_side);
+                            let image = self.get_textured(max_texture_side);
                             if let Err(e) = save_image(&original_path, &image) {
                                 println!("{}", e)
                             }
@@ -330,7 +331,8 @@ impl eframe::App for TemplateApp {
                         // save layers
                         if self.ui_data.overlay_textures {
                             // if textures is selected, save them to layer and main image
-                            let img = self.get_textured();
+                            let max_texture_side = ctx.input(|i| i.max_texture_side);
+                            let img = self.get_textured(max_texture_side);
                             if let Err(e) = save_image(&original_path, &img) {
                                 println!("{}", e)
                             }

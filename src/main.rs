@@ -10,11 +10,7 @@ fn main() -> eframe::Result<()> {
     use log::{warn, LevelFilter};
 
     let log_path = format!("{}.log", NAME);
-    let log_level = if cfg!(debug_assertions) {
-        LevelFilter::Info
-    } else {
-        LevelFilter::Warn
-    };
+    let log_level = LevelFilter::Info;
     let _ = simple_logging::log_to_file(log_path, log_level);
     warn!("{} v{}", NAME, VERSION);
 

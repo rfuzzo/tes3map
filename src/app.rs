@@ -2,67 +2,60 @@ use std::{collections::HashMap, path::PathBuf};
 
 use egui::{reset_button, Color32, ColorImage, Pos2};
 
-use log::{info, warn};
+use log::{debug, error, info, warn};
 use seahash::hash;
 use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture, Plugin};
 
 use crate::*;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(Default, serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
+#[derive(Default)]
 pub struct TemplateApp {
-    #[serde(skip)]
     pub cwd: Option<PathBuf>,
 
     // tes3
-    #[serde(skip)]
     pub landscape_records: HashMap<CellKey, (u64, Landscape)>,
-    #[serde(skip)]
+
     texture_map: HashMap<(u64, u32), ColorImage>,
 
     // painting
-    #[serde(skip)]
     pub dimensions: Dimensions,
-    #[serde(skip)]
+
     pub dimensions_z: DimensionsZ,
-    #[serde(skip)]
+
     pub heights: Vec<f32>,
-    #[serde(skip)]
+
     foreground_pixels: Vec<Color32>,
 
-    #[serde(skip)]
     pub background: Option<egui::TextureHandle>,
-    #[serde(skip)]
+
     pub foreground: Option<egui::TextureHandle>,
-    #[serde(skip)]
+
     pub textured: Option<egui::TextureHandle>,
 
-    #[serde(skip)]
     data_files: Option<PathBuf>,
-    #[serde(skip)]
+
     pub info: String,
-    #[serde(skip)]
+
     pub current_landscape: Option<Landscape>,
 
     // ui
     pub ui_data: SavedUiData,
 
-    #[serde(skip)]
     pub zoom_data: ZoomData,
 }
 
 impl TemplateApp {
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
+        // if let Some(storage) = cc.storage {
+        //     return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        // }
 
         Default::default()
     }
@@ -77,18 +70,20 @@ impl TemplateApp {
         if let Some(dimensions) =
             calculate_dimensions(&self.landscape_records, self.ui_data.texture_size)
         {
-            self.dimensions = dimensions;
+            self.dimensions = dimensions.clone();
 
             // calculate heights
             if let Some((heights, dimensions_z)) =
-                calculate_heights(&self.landscape_records, dimensions)
+                calculate_heights(&self.landscape_records, &dimensions)
             {
                 self.dimensions_z = dimensions_z;
                 self.heights = heights;
 
                 let background = self.get_background();
                 let foreground = self.get_foreground();
-                let textured = self.get_textured();
+
+                let max_texture_side = ctx.input(|i| i.max_texture_side);
+                let textured = self.get_textured(max_texture_side);
 
                 let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
                     ctx.load_texture("background", background, Default::default())
@@ -110,18 +105,19 @@ impl TemplateApp {
         self.foreground = None;
         self.textured = None;
 
-        self.dimensions = dimensions;
+        self.dimensions = dimensions.clone();
 
         // calculate heights
         if let Some((heights, dimensions_z)) =
-            calculate_heights(&self.landscape_records, dimensions)
+            calculate_heights(&self.landscape_records, &dimensions)
         {
             self.dimensions_z = dimensions_z;
             self.heights = heights;
 
             let background = self.get_background();
             let foreground = self.get_foreground();
-            let textured = self.get_textured();
+            let max_texture_side = ctx.input(|i| i.max_texture_side);
+            let textured = self.get_textured(max_texture_side);
 
             let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
                 ctx.load_texture("background", background, Default::default())
@@ -139,7 +135,7 @@ impl TemplateApp {
 
     fn color_pixels_reload(&mut self) {
         let mut color_map: HashMap<CellKey, [[Color32; 65]; 65]> = HashMap::default();
-        let d = self.dimensions;
+        let d = self.dimensions.clone();
 
         for cy in d.min_y..d.max_y + 1 {
             for cx in d.min_x..d.max_x + 1 {
@@ -187,6 +183,7 @@ impl TemplateApp {
     pub fn load_folder(&mut self, path: &PathBuf, ctx: &egui::Context) {
         self.landscape_records.clear();
         self.texture_map.clear();
+        self.data_files = Some(path.clone());
 
         info!("== loading folder {}", path.display());
 
@@ -295,17 +292,17 @@ impl TemplateApp {
     }
 
     fn get_textured_pixels(&self) -> Option<ColorImage> {
-        let d = self.dimensions;
+        let d = &self.dimensions;
         let size = d.pixel_size(d.cell_size());
         let size_tuple = d.pixel_size_tuple(d.cell_size());
-
+        let width = size_tuple[0];
+        let height = size_tuple[1];
         info!(
             "Generating textured image with size {} (width: {}, height: {})",
-            size, size_tuple[0], size_tuple[1],
+            size, width, height,
         );
 
         let mut pixels_color = vec![Color32::TRANSPARENT; size];
-        let texture_size = d.texture_size;
 
         for cy in d.min_y..d.max_y + 1 {
             for cx in d.min_x..d.max_x + 1 {
@@ -328,21 +325,21 @@ impl TemplateApp {
                                     };
 
                                     // textures per tile
-                                    for x in 0..texture_size {
-                                        for y in 0..texture_size {
+                                    for x in 0..d.texture_size {
+                                        for y in 0..d.texture_size {
                                             let tx = d.tranform_to_canvas_x(cx) * d.cell_size()
-                                                + gx * texture_size
+                                                + gx * d.texture_size
                                                 + x;
                                             let ty = d.tranform_to_canvas_y(cy) * d.cell_size()
-                                                + (GRID_SIZE - 1 - gy) * texture_size
+                                                + (GRID_SIZE - 1 - gy) * d.texture_size
                                                 + y;
 
                                             let i = (ty * d.stride(d.cell_size())) + tx;
 
                                             // pick every nth pixel from the texture to downsize
-                                            let sx = x * (TEXTURE_MAX_SIZE / texture_size);
-                                            let sy = y * (TEXTURE_MAX_SIZE / texture_size);
-                                            let index = (sy * texture_size) + sx;
+                                            let sx = x * (TEXTURE_MAX_SIZE / d.texture_size);
+                                            let sy = y * (TEXTURE_MAX_SIZE / d.texture_size);
+                                            let index = (sy * d.texture_size) + sx;
 
                                             let mut color = color_image.pixels[index];
 
@@ -376,13 +373,13 @@ impl TemplateApp {
                     for gx in 0..GRID_SIZE {
                         for gy in 0..GRID_SIZE {
                             // textures per tile
-                            for x in 0..texture_size {
-                                for y in 0..texture_size {
+                            for x in 0..d.texture_size {
+                                for y in 0..d.texture_size {
                                     let tx = d.tranform_to_canvas_x(cx) * d.cell_size()
-                                        + gx * texture_size
+                                        + gx * d.texture_size
                                         + x;
                                     let ty = d.tranform_to_canvas_y(cy) * d.cell_size()
-                                        + gy * texture_size
+                                        + gy * d.texture_size
                                         + y;
 
                                     let i = (ty * d.stride(d.cell_size())) + tx;
@@ -402,9 +399,7 @@ impl TemplateApp {
     }
 
     fn load_texture(&self, r: &LandscapeTexture) -> Option<ColorImage> {
-        let Some(data_files) = self.data_files.clone() else {
-            return None;
-        };
+        let data_files = self.data_files.clone()?;
 
         let texture = r.file_name.clone();
         let tex_path = data_files.join("Textures").join(texture);
@@ -452,14 +447,36 @@ impl TemplateApp {
         let mut img2 =
             ColorImage::new(self.dimensions.pixel_size_tuple(VERTEX_CNT), Color32::WHITE);
         self.color_pixels_reload();
-        img2.pixels = self.foreground_pixels.clone();
+        img2.pixels.clone_from(&self.foreground_pixels);
         img2
     }
 
-    pub fn get_textured(&mut self) -> ColorImage {
+    pub fn get_textured(&mut self, max_texture_side: usize) -> ColorImage {
+        // glow supports textures up to this
+        let size_tuple = self
+            .dimensions
+            .pixel_size_tuple(self.dimensions.cell_size());
+        let width = size_tuple[0];
+        let height = size_tuple[1];
+        if width > max_texture_side || height > max_texture_side {
+            error!(
+                "Texture size too large: (width: {}, height: {}), supported side: {}",
+                width, height, max_texture_side
+            );
+
+            debug!("cell size {}", self.dimensions.cell_size());
+            debug!("texture_size {}", self.dimensions.texture_size);
+            debug!("Resetting texture size to 16");
+
+            self.dimensions.texture_size = 16;
+        }
+
         if let Some(i) = self.get_textured_pixels() {
             i
         } else {
+            // reset to default
+            self.dimensions.texture_size = 16;
+
             // default image
             ColorImage::new(
                 [
@@ -489,27 +506,35 @@ impl TemplateApp {
     }
 
     /// Settings popup menu
-    pub(crate) fn settings_ui(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn settings_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.horizontal(|ui| {
             reset_button(ui, &mut self.ui_data);
 
             if ui.button("Refresh image").clicked() {
                 self.dimensions.texture_size = self.ui_data.texture_size;
 
-                let img = self.get_background();
-                let img2 = self.get_foreground();
-                let img3 = self.get_textured();
+                let background = self.get_background();
+                let foreground = self.get_foreground();
+                let max_texture_side = ctx.input(|i| i.max_texture_side);
+                let textured = self.get_textured(max_texture_side);
 
                 // set handles
-                self.background =
-                    Some(ui.ctx().load_texture("background", img, Default::default()));
+                self.background = Some(ui.ctx().load_texture(
+                    "background",
+                    background,
+                    Default::default(),
+                ));
                 self.foreground = Some(ui.ctx().load_texture(
                     "foreground",
-                    img2,
+                    foreground,
                     Default::default(),
                 ));
 
-                self.textured = Some(ui.ctx().load_texture("textured", img3, Default::default()));
+                self.textured = Some(ui.ctx().load_texture(
+                    "textured",
+                    textured,
+                    Default::default(),
+                ));
             }
         });
 
