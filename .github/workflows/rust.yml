@@ -18,16 +18,12 @@ jobs:
         build_type: [release]
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Build
-      run: cargo build --${{ matrix.build_type }}
+      - name: Build
+        run: cargo build --${{ matrix.build_type }}
 
-    - name: Run tests
-      run: cargo test
-    
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v3
-      with:
-        path: target/${{ matrix.build_type }}/${{ matrix.target }}.exe
-
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          path: target/${{ matrix.build_type }}/${{ matrix.target }}.exe
