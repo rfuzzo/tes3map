@@ -469,6 +469,13 @@ impl TemplateApp {
             debug!("Resetting texture size to 16");
 
             self.dimensions.texture_size = 16;
+
+            // rfd messagebox
+            rfd::MessageDialog::new()
+                .set_title("Error")
+                .set_description("Texture size too large, resetting to 16")
+                .set_buttons(rfd::MessageButtons::Ok)
+                .show();
         }
 
         if let Some(i) = self.get_textured_pixels() {
