@@ -12,14 +12,16 @@ use image::{
     DynamicImage, ImageError, RgbaImage,
 };
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
+use seahash::hash;
 use serde::{Deserialize, Serialize};
 
-use tes3::esp::{Landscape, LandscapeTexture};
+use tes3::esp::{EditorId, Landscape, LandscapeTexture, TES3Object, TypeInfo};
 
 mod app;
 mod background;
 mod eframe_app;
 mod overlay;
+mod views;
 
 pub use app::TemplateApp;
 
@@ -176,6 +178,27 @@ impl Default for ZoomData {
             drag_offset: Default::default(),
             zoom: 1.0,
             zoom_delta: Default::default(),
+        }
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct PluginViewModel {
+    pub hash: u64,
+    pub path: PathBuf,
+    pub enabled: bool,
+}
+impl PluginViewModel {
+    pub fn get_name(&self) -> String {
+        self.path.file_name().unwrap().to_string_lossy().to_string()
+    }
+    // from path
+    pub fn from_path(path: PathBuf) -> Self {
+        let hash = hash(path.to_str().unwrap_or_default().as_bytes());
+        Self {
+            hash,
+            path,
+            enabled: false,
         }
     }
 }
@@ -382,7 +405,7 @@ fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), image::ImageE
 }
 
 fn calculate_dimensions(
-    landscape_records: &HashMap<CellKey, (u64, Landscape)>,
+    landscape_records: &HashMap<CellKey, Landscape>,
     texture_size: usize,
 ) -> Option<Dimensions> {
     let mut min_x: Option<i32> = None;
@@ -491,4 +514,13 @@ fn load_texture(data_files: &Option<PathBuf>, r: &LandscapeTexture) -> Option<Co
     }
 
     None
+}
+
+//////////////////////////////////////////
+// TES3
+
+/// creates a unique id from a record
+/// we take the record tag + the record id
+pub fn get_unique_id(record: &TES3Object) -> String {
+    format!("{},{}", record.tag_str(), record.editor_id())
 }

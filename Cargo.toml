@@ -1,6 +1,6 @@
 [package]
 name = "tes3map"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Moritz Baron <r.fuzzo@gmail.com>"]
 edition = "2021"
 

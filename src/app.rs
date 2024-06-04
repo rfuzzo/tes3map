@@ -3,17 +3,23 @@ use std::{collections::HashMap, path::PathBuf};
 use background::landscape::compute_landscape_image;
 use egui::{reset_button, Color32, ColorImage, Pos2};
 
-use log::{debug, error, info, warn};
-use seahash::hash;
-use tes3::esp::{Landscape, LandscapeTexture, Plugin};
+use log::{debug, error};
+use tes3::esp::{Landscape, Region};
 
 use crate::*;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ESidePanelView {
+    #[default]
+    Plugins,
+    Cells,
+}
+
+type PluginHash = u64;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(Default)]
 pub struct TemplateApp {
-    pub cwd: Option<PathBuf>,
-
     // ui
     pub ui_data: SavedUiData,
     pub zoom_data: ZoomData,
@@ -21,15 +27,22 @@ pub struct TemplateApp {
     pub dimensions_z: DimensionsZ,
     pub heights: Vec<f32>,
 
+    // tes3
+    pub data_files: Option<PathBuf>,
+    pub plugins: Option<Vec<PluginViewModel>>,
+
+    // runtime data
+    pub land_records: HashMap<CellKey, Landscape>,
+    pub ltex_records: HashMap<u32, LandscapeTexture>,
+    pub regn_records: HashMap<String, Region>,
+    // overlays
+    pub edges: HashMap<String, Vec<(CellKey, CellKey)>>,
+    pub cell_conflicts: HashMap<CellKey, Vec<u64>>,
     // textures in memory
     pub bg: Option<egui::TextureHandle>,
 
-    // tes3
-    data_files: Option<PathBuf>,
-    pub landscape_records: HashMap<CellKey, (u64, Landscape)>,
-    texture_map: HashMap<(u64, u32), ColorImage>,
-
     // app
+    pub side_panel_view: ESidePanelView,
     pub info: String,
     pub current_landscape: Option<Landscape>,
 }
@@ -49,93 +62,6 @@ impl TemplateApp {
         Default::default()
     }
 
-    pub fn load_folder(&mut self, path: &PathBuf, _ctx: &egui::Context) {
-        self.landscape_records.clear();
-        self.texture_map.clear();
-        self.data_files = Some(path.clone());
-
-        info!("== loading folder {}", path.display());
-
-        for path in get_plugins_sorted(&path, false) {
-            let mut plugin = Plugin::new();
-            if plugin.load_path(&path).is_ok() {
-                let hash = hash(path.to_str().unwrap_or_default().as_bytes());
-                info!("\t== loading plugin {} with hash {}", path.display(), hash);
-
-                for landscape in plugin.objects_of_type::<Landscape>() {
-                    let key = landscape.grid;
-                    self.landscape_records
-                        .insert(key, (hash, landscape.clone()));
-                }
-
-                for r in plugin.into_objects_of_type::<LandscapeTexture>() {
-                    let key = r.index;
-                    if let Some(image) = load_texture(&self.data_files, &r) {
-                        self.texture_map.insert((hash, key), image);
-                        info!(
-                            "\t\tinserting texture [{:?}] {} ({})",
-                            (hash, key),
-                            r.file_name,
-                            r.id
-                        );
-                    } else {
-                        warn!("\t\tmissing texture [{:?}] {}", (hash, key), r.file_name)
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn open_folder(&mut self, ctx: &egui::Context) {
-        let folder_option = rfd::FileDialog::new()
-            .add_filter("esm", &["esm"])
-            .add_filter("esp", &["esp"])
-            .pick_folder();
-
-        if let Some(path) = folder_option {
-            self.data_files = Some(path.clone());
-            self.load_folder(&path, ctx);
-        }
-    }
-
-    pub fn open_plugin(&mut self, _ctx: &egui::Context) {
-        let file_option = rfd::FileDialog::new()
-            .add_filter("esm", &["esm"])
-            .add_filter("esp", &["esp"])
-            .pick_file();
-
-        if let Some(path) = file_option {
-            if let Some(dir_path) = path.parent() {
-                self.data_files = Some(PathBuf::from(dir_path));
-            }
-
-            let hash = hash(path.to_str().unwrap_or_default().as_bytes());
-            info!("\t== loading plugin {} with hash {}", path.display(), hash);
-
-            let mut plugin = Plugin::new();
-            if plugin.load_path(&path).is_ok() {
-                // get data
-                self.landscape_records.clear();
-                self.texture_map.clear();
-
-                for r in plugin.objects_of_type::<Landscape>() {
-                    let key = r.grid;
-                    self.landscape_records.insert(key, (hash, r.clone()));
-                }
-
-                for r in plugin.into_objects_of_type::<LandscapeTexture>() {
-                    let key = r.index;
-                    if let Some(image) = load_texture(&self.data_files, &r) {
-                        self.texture_map.insert((hash, key), image);
-                        info!("\tinserting texture [{:?}] {}", (hash, key), r.file_name);
-                    } else {
-                        warn!("\tmissing texture [{:?}] {}", (hash, key), r.file_name)
-                    }
-                }
-            }
-        }
-    }
-
     /// Assigns landscape_records, dimensions and pixels
     pub fn reload_background(&mut self, ctx: &egui::Context, new_dimensions: Option<Dimensions>) {
         self.bg = None;
@@ -145,7 +71,7 @@ impl TemplateApp {
             self.dimensions = dimensions.clone();
         } else {
             let Some(dimensions) =
-                calculate_dimensions(&self.landscape_records, self.ui_data.texture_size)
+                calculate_dimensions(&self.land_records, self.ui_data.texture_size)
             else {
                 return;
             };
@@ -155,7 +81,7 @@ impl TemplateApp {
 
         // calculate heights
         if let Some((heights, dimensions_z)) =
-            background::heightmap::calculate_heights(&self.landscape_records, &self.dimensions)
+            background::heightmap::calculate_heights(&self.land_records, &self.dimensions)
         {
             self.dimensions_z = dimensions_z;
             self.heights = heights;
@@ -218,12 +144,13 @@ impl TemplateApp {
                 .show();
         }
 
-        if let Some(i) = compute_landscape_image(
-            dimensions,
-            &self.landscape_records,
-            &self.texture_map,
-            &self.heights,
-        ) {
+        // get textures
+        let mut texture_map = HashMap::default();
+        // TODO
+
+        if let Some(i) =
+            compute_landscape_image(dimensions, &self.land_records, &texture_map, &self.heights)
+        {
             i
         } else {
             // default image
@@ -243,7 +170,7 @@ impl TemplateApp {
 
         img2.pixels.clone_from(&overlay::paths::color_pixels_reload(
             &self.dimensions,
-            &self.landscape_records,
+            &self.land_records,
             self.ui_data.alpha,
         ));
         img2

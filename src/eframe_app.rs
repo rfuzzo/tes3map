@@ -13,11 +13,10 @@ impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // on start, we check the current folder for esps
-        if self.cwd.is_none() {
+        if self.data_files.is_none() {
             if let Ok(cwd) = env::current_dir() {
                 // load once
-                self.cwd = Some(cwd.clone());
-                self.load_folder(&cwd, ctx);
+                self.data_files = Some(cwd.clone());
             }
         }
 
@@ -25,18 +24,6 @@ impl eframe::App for TemplateApp {
             // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.button("Load folder").clicked() {
-                        self.open_folder(ctx);
-                        ui.close_menu();
-                    }
-
-                    if ui.button("Load plugin").clicked() {
-                        self.open_plugin(ctx);
-                        ui.close_menu();
-                    }
-
-                    ui.separator();
-
                     if ui.button("Quit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
@@ -57,51 +44,10 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        egui::SidePanel::right("cell_panel").show(ctx, |ui| {
-            ui.heading("Cells");
-            if ui.button("Paint all").clicked() {
-                // TODO reload and paint all
-            }
-
-            ui.separator();
-
-            egui::ScrollArea::vertical()
-                .auto_shrink([false; 2])
-                .show(ui, |ui| {
-                    if let Some(d) =
-                        calculate_dimensions(&self.landscape_records, self.ui_data.texture_size)
-                    {
-                        for y in (d.min_y..=d.max_y).rev() {
-                            let mut any = false;
-                            for x in d.min_x..=d.max_x {
-                                if let Some(_v) = self.landscape_records.get(&(x, y)) {
-                                    any = true;
-                                }
-                            }
-                            if any {
-                                ui.collapsing(format!("Y: {y}"), |ui| {
-                                    for x in d.min_x..=d.max_x {
-                                        if let Some(v) = self.landscape_records.get(&(x, y)) {
-                                            if ui.button(format!("({x},{y})")).clicked() {
-                                                // store
-                                                self.current_landscape = Some(v.1.clone());
-
-                                                let dimensions = Dimensions {
-                                                    min_x: x,
-                                                    min_y: y,
-                                                    max_x: x,
-                                                    max_y: y,
-                                                    texture_size: TEXTURE_MAX_SIZE,
-                                                };
-                                                self.reload_background(ctx, Some(dimensions));
-                                            }
-                                        }
-                                    }
-                                });
-                            }
-                        }
-                    }
-                });
+        // right panel
+        egui::SidePanel::right("cell_panel").show(ctx, |ui| match self.side_panel_view {
+            app::ESidePanelView::Plugins => self.plugins_panel(ui, ctx),
+            app::ESidePanelView::Cells => self.cell_panel(ui, ctx),
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -119,17 +65,6 @@ impl eframe::App for TemplateApp {
             ui.separator();
 
             if self.heights.is_empty() {
-                // Default UI
-                ui.horizontal(|ui| {
-                    if ui.button("Load plugin").clicked() {
-                        self.open_plugin(ctx);
-                    }
-
-                    if ui.button("Load folder").clicked() {
-                        self.open_folder(ctx);
-                    }
-                });
-
                 // settings
                 egui::Frame::popup(ui.style())
                     .stroke(egui::Stroke::NONE)

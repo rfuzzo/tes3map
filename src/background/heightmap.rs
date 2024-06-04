@@ -5,7 +5,7 @@ use tes3::esp::{Landscape, LandscapeFlags};
 use crate::{CellKey, Dimensions, DimensionsZ, VERTEX_CNT};
 
 pub fn calculate_heights(
-    landscape_records: &HashMap<CellKey, (u64, Landscape)>,
+    landscape_records: &HashMap<CellKey, Landscape>,
     dimensions: &Dimensions,
 ) -> Option<(Vec<f32>, DimensionsZ)> {
     let mut min_z: Option<f32> = None;
@@ -14,7 +14,7 @@ pub fn calculate_heights(
 
     for cy in dimensions.min_y..dimensions.max_y + 1 {
         for cx in dimensions.min_x..dimensions.max_x + 1 {
-            if let Some((_hash, landscape)) = landscape_records.get(&(cx, cy)) {
+            if let Some(landscape) = landscape_records.get(&(cx, cy)) {
                 if landscape
                     .landscape_flags
                     .contains(LandscapeFlags::USES_VERTEX_HEIGHTS_AND_NORMALS)

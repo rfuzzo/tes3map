@@ -12,8 +12,8 @@ use crate::{
 /// Compute a landscape image from the given landscape records and texture map.
 pub fn compute_landscape_image(
     dimensions: &Dimensions,
-    landscape_records: &HashMap<CellKey, (u64, Landscape)>,
-    texture_map: &HashMap<(u64, u32), ColorImage>,
+    landscape_records: &HashMap<CellKey, Landscape>,
+    texture_map: &HashMap<u32, ColorImage>,
     heights: &[f32],
 ) -> Option<ColorImage> {
     let d = dimensions;
@@ -30,7 +30,7 @@ pub fn compute_landscape_image(
 
     for cy in d.min_y..d.max_y + 1 {
         for cx in d.min_x..d.max_x + 1 {
-            if let Some((hash, landscape)) = landscape_records.get(&(cx, cy)) {
+            if let Some(landscape) = landscape_records.get(&(cx, cy)) {
                 if landscape
                     .landscape_flags
                     .contains(LandscapeFlags::USES_TEXTURES)
@@ -43,7 +43,7 @@ pub fn compute_landscape_image(
                                 let dy = (4 * (gy / 4)) + (gx / 4);
 
                                 let key = data[dy][dx] as u32;
-                                let Some(color_image) = texture_map.get(&(*hash, key)) else {
+                                let Some(color_image) = texture_map.get(&key) else {
                                     continue;
                                 };
 

@@ -55,7 +55,7 @@ pub fn color_map_to_pixels(
 
 pub fn color_pixels_reload(
     dimensions: &Dimensions,
-    landscape_records: &HashMap<CellKey, (u64, Landscape)>,
+    landscape_records: &HashMap<CellKey, Landscape>,
     alpha: u8,
 ) -> Vec<Color32> {
     let mut color_map: HashMap<CellKey, [[Color32; 65]; 65]> = HashMap::default();
@@ -63,7 +63,7 @@ pub fn color_pixels_reload(
 
     for cy in d.min_y..d.max_y + 1 {
         for cx in d.min_x..d.max_x + 1 {
-            if let Some((_hash, landscape)) = landscape_records.get(&(cx, cy)) {
+            if let Some(landscape) = landscape_records.get(&(cx, cy)) {
                 // get color data
                 let mut colors: [[Color32; 65]; 65] =
                     [[Color32::TRANSPARENT; VERTEX_CNT]; VERTEX_CNT];
