@@ -1,10 +1,11 @@
 use std::{collections::HashMap, path::PathBuf};
 
+use background::landscape::compute_landscape_image;
 use egui::{reset_button, Color32, ColorImage, Pos2};
 
 use log::{debug, error, info, warn};
 use seahash::hash;
-use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture, Plugin};
+use tes3::esp::{Landscape, LandscapeTexture, Plugin};
 
 use crate::*;
 
@@ -13,36 +14,24 @@ use crate::*;
 pub struct TemplateApp {
     pub cwd: Option<PathBuf>,
 
-    // tes3
-    pub landscape_records: HashMap<CellKey, (u64, Landscape)>,
-
-    texture_map: HashMap<(u64, u32), ColorImage>,
-
-    // painting
-    pub dimensions: Dimensions,
-
-    pub dimensions_z: DimensionsZ,
-
-    pub heights: Vec<f32>,
-
-    foreground_pixels: Vec<Color32>,
-
-    pub background: Option<egui::TextureHandle>,
-
-    pub foreground: Option<egui::TextureHandle>,
-
-    pub textured: Option<egui::TextureHandle>,
-
-    data_files: Option<PathBuf>,
-
-    pub info: String,
-
-    pub current_landscape: Option<Landscape>,
-
     // ui
     pub ui_data: SavedUiData,
-
     pub zoom_data: ZoomData,
+    pub dimensions: Dimensions,
+    pub dimensions_z: DimensionsZ,
+    pub heights: Vec<f32>,
+
+    // textures in memory
+    pub bg: Option<egui::TextureHandle>,
+
+    // tes3
+    data_files: Option<PathBuf>,
+    pub landscape_records: HashMap<CellKey, (u64, Landscape)>,
+    texture_map: HashMap<(u64, u32), ColorImage>,
+
+    // app
+    pub info: String,
+    pub current_landscape: Option<Landscape>,
 }
 
 impl TemplateApp {
@@ -60,127 +49,7 @@ impl TemplateApp {
         Default::default()
     }
 
-    /// Assigns landscape_records, dimensions and pixels
-    pub fn load_data(&mut self, ctx: &egui::Context) {
-        self.background = None;
-        self.foreground = None;
-        self.textured = None;
-
-        // calculate dimensions
-        if let Some(dimensions) =
-            calculate_dimensions(&self.landscape_records, self.ui_data.texture_size)
-        {
-            self.dimensions = dimensions.clone();
-
-            // calculate heights
-            if let Some((heights, dimensions_z)) =
-                calculate_heights(&self.landscape_records, &dimensions)
-            {
-                self.dimensions_z = dimensions_z;
-                self.heights = heights;
-
-                let background = self.get_background();
-                let foreground = self.get_foreground();
-
-                let max_texture_side = ctx.input(|i| i.max_texture_side);
-                let textured = self.get_textured(max_texture_side);
-
-                let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
-                    ctx.load_texture("background", background, Default::default())
-                });
-
-                let _: &egui::TextureHandle = self.foreground.get_or_insert_with(|| {
-                    ctx.load_texture("foreground", foreground, Default::default())
-                });
-
-                let _: &egui::TextureHandle = self.textured.get_or_insert_with(|| {
-                    ctx.load_texture("textured", textured, Default::default())
-                });
-            }
-        }
-    }
-
-    pub fn load_data_with_dimension(&mut self, dimensions: Dimensions, ctx: &egui::Context) {
-        self.background = None;
-        self.foreground = None;
-        self.textured = None;
-
-        self.dimensions = dimensions.clone();
-
-        // calculate heights
-        if let Some((heights, dimensions_z)) =
-            calculate_heights(&self.landscape_records, &dimensions)
-        {
-            self.dimensions_z = dimensions_z;
-            self.heights = heights;
-
-            let background = self.get_background();
-            let foreground = self.get_foreground();
-            let max_texture_side = ctx.input(|i| i.max_texture_side);
-            let textured = self.get_textured(max_texture_side);
-
-            let _: &egui::TextureHandle = self.background.get_or_insert_with(|| {
-                ctx.load_texture("background", background, Default::default())
-            });
-
-            let _: &egui::TextureHandle = self.foreground.get_or_insert_with(|| {
-                ctx.load_texture("foreground", foreground, Default::default())
-            });
-
-            let _: &egui::TextureHandle = self
-                .textured
-                .get_or_insert_with(|| ctx.load_texture("textured", textured, Default::default()));
-        }
-    }
-
-    fn color_pixels_reload(&mut self) {
-        let mut color_map: HashMap<CellKey, [[Color32; 65]; 65]> = HashMap::default();
-        let d = self.dimensions.clone();
-
-        for cy in d.min_y..d.max_y + 1 {
-            for cx in d.min_x..d.max_x + 1 {
-                if let Some((_hash, landscape)) = self.landscape_records.get(&(cx, cy)) {
-                    // get color data
-                    let mut colors: [[Color32; 65]; 65] =
-                        [[Color32::TRANSPARENT; VERTEX_CNT]; VERTEX_CNT];
-
-                    if landscape
-                        .landscape_flags
-                        .contains(LandscapeFlags::USES_VERTEX_COLORS)
-                    {
-                        let data = &landscape.vertex_colors.data.clone();
-
-                        for y in 0..VERTEX_CNT {
-                            for x in 0..VERTEX_CNT {
-                                let r = data[y][x][0];
-                                let g = data[y][x][1];
-                                let b = data[y][x][2];
-
-                                let ratio = (r as f32 + g as f32 + b as f32) / (3_f32 * 255_f32);
-                                let temp = (1_f32 - ratio).clamp(0.0, 1.0);
-
-                                let c = self.ui_data.alpha as f32 / 100_f32;
-                                let alpha = if temp < c { temp / c } else { 1_f32 };
-
-                                let rgb = Color32::from_rgba_unmultiplied(
-                                    r,
-                                    g,
-                                    b,
-                                    (255_f32 * alpha) as u8,
-                                );
-                                colors[y][x] = rgb;
-                            }
-                        }
-                    }
-                    color_map.insert((cx, cy), colors);
-                }
-            }
-        }
-
-        self.foreground_pixels = color_map_to_pixels(d, color_map);
-    }
-
-    pub fn load_folder(&mut self, path: &PathBuf, ctx: &egui::Context) {
+    pub fn load_folder(&mut self, path: &PathBuf, _ctx: &egui::Context) {
         self.landscape_records.clear();
         self.texture_map.clear();
         self.data_files = Some(path.clone());
@@ -201,7 +70,7 @@ impl TemplateApp {
 
                 for r in plugin.into_objects_of_type::<LandscapeTexture>() {
                     let key = r.index;
-                    if let Some(image) = self.load_texture(&r) {
+                    if let Some(image) = load_texture(&self.data_files, &r) {
                         self.texture_map.insert((hash, key), image);
                         info!(
                             "\t\tinserting texture [{:?}] {} ({})",
@@ -215,8 +84,6 @@ impl TemplateApp {
                 }
             }
         }
-
-        self.load_data(ctx);
     }
 
     pub fn open_folder(&mut self, ctx: &egui::Context) {
@@ -231,7 +98,7 @@ impl TemplateApp {
         }
     }
 
-    pub fn open_plugin(&mut self, ctx: &egui::Context) {
+    pub fn open_plugin(&mut self, _ctx: &egui::Context) {
         let file_option = rfd::FileDialog::new()
             .add_filter("esm", &["esm"])
             .add_filter("esp", &["esp"])
@@ -258,183 +125,65 @@ impl TemplateApp {
 
                 for r in plugin.into_objects_of_type::<LandscapeTexture>() {
                     let key = r.index;
-                    if let Some(image) = self.load_texture(&r) {
+                    if let Some(image) = load_texture(&self.data_files, &r) {
                         self.texture_map.insert((hash, key), image);
                         info!("\tinserting texture [{:?}] {}", (hash, key), r.file_name);
                     } else {
                         warn!("\tmissing texture [{:?}] {}", (hash, key), r.file_name)
                     }
                 }
-
-                // get pictures
-                self.load_data(ctx);
             }
         }
     }
 
-    pub fn get_layered_image(&mut self, img: ColorImage, img2: ColorImage) -> ColorImage {
-        // base image
-        let mut layered = img.pixels.clone();
+    /// Assigns landscape_records, dimensions and pixels
+    pub fn reload_background(&mut self, ctx: &egui::Context, new_dimensions: Option<Dimensions>) {
+        self.bg = None;
 
-        // overlay second image
-        for (i, color1) in img.pixels.into_iter().enumerate() {
-            let color2 = img2.pixels[i];
-            layered[i] = overlay_colors(color1, color2);
+        // calculate dimensions
+        if let Some(dimensions) = new_dimensions {
+            self.dimensions = dimensions.clone();
+        } else {
+            let Some(dimensions) =
+                calculate_dimensions(&self.landscape_records, self.ui_data.texture_size)
+            else {
+                return;
+            };
+
+            self.dimensions = dimensions.clone();
         }
 
-        // create new colorImage
-        let mut layered_img = ColorImage::new(
-            self.dimensions.pixel_size_tuple(VERTEX_CNT),
-            Color32::TRANSPARENT,
-        );
-        layered_img.pixels = layered;
-        layered_img
-    }
+        // calculate heights
+        if let Some((heights, dimensions_z)) =
+            background::heightmap::calculate_heights(&self.landscape_records, &self.dimensions)
+        {
+            self.dimensions_z = dimensions_z;
+            self.heights = heights;
+            let max_texture_side = ctx.input(|i| i.max_texture_side);
 
-    fn get_textured_pixels(&self) -> Option<ColorImage> {
-        let d = &self.dimensions;
-        let size = d.pixel_size(d.cell_size());
-        let size_tuple = d.pixel_size_tuple(d.cell_size());
-        let width = size_tuple[0];
-        let height = size_tuple[1];
-        info!(
-            "Generating textured image with size {} (width: {}, height: {})",
-            size, width, height,
-        );
-
-        let mut pixels_color = vec![Color32::TRANSPARENT; size];
-
-        for cy in d.min_y..d.max_y + 1 {
-            for cx in d.min_x..d.max_x + 1 {
-                if let Some((hash, landscape)) = self.landscape_records.get(&(cx, cy)) {
-                    if landscape
-                        .landscape_flags
-                        .contains(LandscapeFlags::USES_TEXTURES)
-                    {
-                        {
-                            let data = &landscape.texture_indices.data;
-                            for gx in 0..GRID_SIZE {
-                                for gy in 0..GRID_SIZE {
-                                    let dx = (4 * (gy % 4)) + (gx % 4);
-                                    let dy = (4 * (gy / 4)) + (gx / 4);
-
-                                    let key = data[dy][dx] as u32;
-                                    let Some(color_image) = self.texture_map.get(&(*hash, key))
-                                    else {
-                                        continue;
-                                    };
-
-                                    // textures per tile
-                                    for x in 0..d.texture_size {
-                                        for y in 0..d.texture_size {
-                                            let tx = d.tranform_to_canvas_x(cx) * d.cell_size()
-                                                + gx * d.texture_size
-                                                + x;
-                                            let ty = d.tranform_to_canvas_y(cy) * d.cell_size()
-                                                + (GRID_SIZE - 1 - gy) * d.texture_size
-                                                + y;
-
-                                            let i = (ty * d.stride(d.cell_size())) + tx;
-
-                                            // pick every nth pixel from the texture to downsize
-                                            let sx = x * (TEXTURE_MAX_SIZE / d.texture_size);
-                                            let sy = y * (TEXTURE_MAX_SIZE / d.texture_size);
-                                            let index = (sy * d.texture_size) + sx;
-
-                                            let mut color = color_image.pixels[index];
-
-                                            // blend color when under water
-                                            let screenx = tx * VERTEX_CNT / d.cell_size();
-                                            let screeny = ty * VERTEX_CNT / d.cell_size();
-
-                                            if let Some(height) =
-                                                self.height_from_screen_space(screenx, screeny)
-                                            {
-                                                if height < 0_f32 {
-                                                    let a = 0.5;
-
-                                                    color = overlay_colors_with_alpha(
-                                                        color,
-                                                        Color32::BLUE,
-                                                        a,
-                                                    );
-                                                }
-                                            }
-
-                                            pixels_color[i] = color;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // no landscape
-                    for gx in 0..GRID_SIZE {
-                        for gy in 0..GRID_SIZE {
-                            // textures per tile
-                            for x in 0..d.texture_size {
-                                for y in 0..d.texture_size {
-                                    let tx = d.tranform_to_canvas_x(cx) * d.cell_size()
-                                        + gx * d.texture_size
-                                        + x;
-                                    let ty = d.tranform_to_canvas_y(cy) * d.cell_size()
-                                        + gy * d.texture_size
-                                        + y;
-
-                                    let i = (ty * d.stride(d.cell_size())) + tx;
-
-                                    pixels_color[i] = DEFAULT_COLOR;
-                                }
-                            }
-                        }
-                    }
+            match self.ui_data.background {
+                EBackground::None => {
+                    // do nothing
+                }
+                EBackground::Landscape => {
+                    let landscape_img = self.get_landscape_image(max_texture_side);
+                    let _: &egui::TextureHandle = self.bg.get_or_insert_with(|| {
+                        ctx.load_texture("background", landscape_img, Default::default())
+                    });
+                }
+                EBackground::HeightMap => {
+                    let heightmap_img = self.get_heightmap_image();
+                    let _: &egui::TextureHandle = self.bg.get_or_insert_with(|| {
+                        ctx.load_texture("background", heightmap_img, Default::default())
+                    });
                 }
             }
         }
-
-        let mut img = ColorImage::new(d.pixel_size_tuple(d.cell_size()), Color32::GOLD);
-        img.pixels = pixels_color;
-        Some(img)
-    }
-
-    fn load_texture(&self, r: &LandscapeTexture) -> Option<ColorImage> {
-        let data_files = self.data_files.clone()?;
-
-        let texture = r.file_name.clone();
-        let tex_path = data_files.join("Textures").join(texture);
-        if !tex_path.exists() {
-            return None;
-        }
-
-        // decode image
-        if let Ok(mut reader) = image::io::Reader::open(&tex_path) {
-            let ext = tex_path.extension().unwrap().to_string_lossy();
-            if ext.contains("tga") {
-                reader.set_format(image::ImageFormat::Tga);
-            } else if ext.contains("dds") {
-                reader.set_format(image::ImageFormat::Dds);
-            } else {
-                // not supported
-                return None;
-            }
-
-            let Ok(image) = reader.decode() else {
-                return None;
-            };
-
-            let size = [image.width() as _, image.height() as _];
-            let image_buffer = image.to_rgba8();
-            let pixels = image_buffer.as_flat_samples();
-            return Some(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()));
-        }
-
-        None
     }
 
     // Shortcuts
 
-    pub fn get_background(&mut self) -> ColorImage {
+    pub fn get_heightmap_image(&mut self) -> ColorImage {
         create_image(
             &self.heights,
             self.dimensions.pixel_size_tuple(VERTEX_CNT),
@@ -443,19 +192,10 @@ impl TemplateApp {
         )
     }
 
-    pub fn get_foreground(&mut self) -> ColorImage {
-        let mut img2 =
-            ColorImage::new(self.dimensions.pixel_size_tuple(VERTEX_CNT), Color32::WHITE);
-        self.color_pixels_reload();
-        img2.pixels.clone_from(&self.foreground_pixels);
-        img2
-    }
-
-    pub fn get_textured(&mut self, max_texture_side: usize) -> ColorImage {
+    pub fn get_landscape_image(&mut self, max_texture_side: usize) -> ColorImage {
         // glow supports textures up to this
-        let size_tuple = self
-            .dimensions
-            .pixel_size_tuple(self.dimensions.cell_size());
+        let dimensions = &mut self.dimensions;
+        let size_tuple = dimensions.pixel_size_tuple(dimensions.cell_size());
         let width = size_tuple[0];
         let height = size_tuple[1];
         if width > max_texture_side || height > max_texture_side {
@@ -464,11 +204,11 @@ impl TemplateApp {
                 width, height, max_texture_side
             );
 
-            debug!("cell size {}", self.dimensions.cell_size());
-            debug!("texture_size {}", self.dimensions.texture_size);
+            debug!("cell size {}", dimensions.cell_size());
+            debug!("texture_size {}", dimensions.texture_size);
             debug!("Resetting texture size to 16");
 
-            self.dimensions.texture_size = 16;
+            dimensions.texture_size = 16;
 
             // rfd messagebox
             rfd::MessageDialog::new()
@@ -478,26 +218,35 @@ impl TemplateApp {
                 .show();
         }
 
-        if let Some(i) = self.get_textured_pixels() {
+        if let Some(i) = compute_landscape_image(
+            dimensions,
+            &self.landscape_records,
+            &self.texture_map,
+            &self.heights,
+        ) {
             i
         } else {
-            // reset to default
-            self.dimensions.texture_size = 16;
-
             // default image
             ColorImage::new(
                 [
-                    self.dimensions.width() * self.dimensions.cell_size(),
-                    self.dimensions.height() * self.dimensions.cell_size(),
+                    dimensions.width() * dimensions.cell_size(),
+                    dimensions.height() * dimensions.cell_size(),
                 ],
                 Color32::BLACK,
             )
         }
     }
 
-    pub fn height_from_screen_space(&self, x: usize, y: usize) -> Option<f32> {
-        let i = (y * self.dimensions.stride(VERTEX_CNT)) + x;
-        self.heights.get(i).copied()
+    pub fn get_overlay_path_image(&mut self) -> ColorImage {
+        let mut img2 =
+            ColorImage::new(self.dimensions.pixel_size_tuple(VERTEX_CNT), Color32::WHITE);
+
+        img2.pixels.clone_from(&overlay::paths::color_pixels_reload(
+            &self.dimensions,
+            &self.landscape_records,
+            self.ui_data.alpha,
+        ));
+        img2
     }
 
     // UI methods
@@ -513,43 +262,39 @@ impl TemplateApp {
     }
 
     /// Settings popup menu
-    pub(crate) fn settings_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    pub(crate) fn settings_ui(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context) {
         ui.horizontal(|ui| {
             reset_button(ui, &mut self.ui_data);
 
             if ui.button("Refresh image").clicked() {
                 self.dimensions.texture_size = self.ui_data.texture_size;
 
-                let background = self.get_background();
-                let foreground = self.get_foreground();
-                let max_texture_side = ctx.input(|i| i.max_texture_side);
-                let textured = self.get_textured(max_texture_side);
-
-                // set handles
-                self.background = Some(ui.ctx().load_texture(
-                    "background",
-                    background,
-                    Default::default(),
-                ));
-                self.foreground = Some(ui.ctx().load_texture(
-                    "foreground",
-                    foreground,
-                    Default::default(),
-                ));
-
-                self.textured = Some(ui.ctx().load_texture(
-                    "textured",
-                    textured,
-                    Default::default(),
-                ));
+                // TOOD reload
             }
         });
 
         ui.separator();
-        ui.label("Overlays");
-        ui.checkbox(&mut self.ui_data.overlay_terrain, "Show terrain map");
-        ui.checkbox(&mut self.ui_data.overlay_textures, "Show textures");
 
+        ui.label("Background");
+        egui::ComboBox::from_label("Background")
+            .selected_text(format!("{:?}", self.ui_data.background))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut self.ui_data.background, EBackground::None, "None");
+                ui.selectable_value(
+                    &mut self.ui_data.background,
+                    EBackground::HeightMap,
+                    "HeightMap",
+                );
+                ui.selectable_value(
+                    &mut self.ui_data.background,
+                    EBackground::Landscape,
+                    "Landscape",
+                );
+            });
+
+        ui.separator();
+
+        ui.label("Overlays");
         ui.checkbox(&mut self.ui_data.overlay_paths, "Show overlay map");
 
         ui.separator();

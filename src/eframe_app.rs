@@ -60,8 +60,7 @@ impl eframe::App for TemplateApp {
         egui::SidePanel::right("cell_panel").show(ctx, |ui| {
             ui.heading("Cells");
             if ui.button("Paint all").clicked() {
-                // paint all
-                self.load_data(ctx);
+                // TODO reload and paint all
             }
 
             ui.separator();
@@ -94,7 +93,7 @@ impl eframe::App for TemplateApp {
                                                     max_y: y,
                                                     texture_size: TEXTURE_MAX_SIZE,
                                                 };
-                                                self.load_data_with_dimension(dimensions, ctx);
+                                                self.reload_background(ctx, Some(dimensions));
                                             }
                                         }
                                     }
@@ -189,21 +188,17 @@ impl eframe::App for TemplateApp {
             // let ry = (response.rect.max.y - response.rect.min.y) / pixel_height;
             // let uv = Rect::from_min_max(pos2(0.0, 0.0), Pos2::new(rx, ry));
 
-            if self.ui_data.overlay_terrain {
-                if let Some(texture) = &self.background {
-                    painter.image(texture.into(), canvas, uv, Color32::WHITE);
-                }
+            // Background
+            if let Some(texture) = &self.bg {
+                painter.image(texture.into(), canvas, uv, Color32::WHITE);
             }
-            if self.ui_data.overlay_textures {
-                if let Some(texture) = &self.textured {
-                    painter.image(texture.into(), canvas, uv, Color32::WHITE);
-                }
-            }
-            if self.ui_data.overlay_paths {
-                if let Some(texture) = &self.foreground {
-                    painter.image(texture.into(), canvas, uv, Color32::WHITE);
-                }
-            }
+
+            // TODO Overlays
+            // if self.ui_data.overlay_paths {
+            //     if let Some(texture) = &self.foreground {
+            //         painter.image(texture.into(), canvas, uv, Color32::WHITE);
+            //     }
+            // }
 
             // Responses
 
@@ -215,7 +210,8 @@ impl eframe::App for TemplateApp {
                 let x = cell_pos_zeroed.x as usize;
                 let y = cell_pos_zeroed.y as usize;
 
-                if let Some(value) = self.height_from_screen_space(x, y) {
+                if let Some(value) = height_from_screen_space(&self.heights, &self.dimensions, x, y)
+                {
                     // get cell grid
                     let cx = self.dimensions.tranform_to_cell_x((x / VERTEX_CNT) as i32);
                     let cy = self.dimensions.tranform_to_cell_y((y / VERTEX_CNT) as i32);
@@ -286,37 +282,40 @@ impl eframe::App for TemplateApp {
 
                     if let Some(original_path) = file_option {
                         // logic here:
-                        // if textures is selected, we just save that
-                        if self.ui_data.overlay_textures {
-                            let max_texture_side = ctx.input(|i| i.max_texture_side);
-                            let image = self.get_textured(max_texture_side);
-                            if let Err(e) = save_image(&original_path, &image) {
-                                println!("{}", e)
-                            }
-                        } else {
-                            // else we save the current overlayed image
-                            if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
-                                let background = self.get_background();
-                                let foreground = self.get_foreground();
 
-                                let layered_img = self.get_layered_image(background, foreground);
-                                if let Err(e) = save_image(&original_path, &layered_img) {
-                                    println!("{}", e)
-                                }
-                            } else if self.ui_data.overlay_terrain {
-                                // only save terrain
-                                let background = self.get_background();
-                                if let Err(e) = save_image(&original_path, &background) {
-                                    println!("{}", e)
-                                }
-                            } else if self.ui_data.overlay_paths {
-                                // only save overlay
-                                let foreground = self.get_foreground();
-                                if let Err(e) = save_image(&original_path, &foreground) {
-                                    println!("{}", e)
-                                }
-                            }
-                        }
+                        // TODO save image
+
+                        // // if textures is selected, we just save that
+                        // if self.ui_data.overlay_textures {
+                        //     let max_texture_side = ctx.input(|i| i.max_texture_side);
+                        //     let image = self.get_textured(max_texture_side);
+                        //     if let Err(e) = save_image(&original_path, &image) {
+                        //         println!("{}", e)
+                        //     }
+                        // } else {
+                        //     // else we save the current overlayed image
+                        //     if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
+                        //         let background = self.get_background();
+                        //         let foreground = self.get_foreground();
+
+                        //         let layered_img = self.get_layered_image(background, foreground);
+                        //         if let Err(e) = save_image(&original_path, &layered_img) {
+                        //             println!("{}", e)
+                        //         }
+                        //     } else if self.ui_data.overlay_terrain {
+                        //         // only save terrain
+                        //         let background = self.get_background();
+                        //         if let Err(e) = save_image(&original_path, &background) {
+                        //             println!("{}", e)
+                        //         }
+                        //     } else if self.ui_data.overlay_paths {
+                        //         // only save overlay
+                        //         let foreground = self.get_foreground();
+                        //         if let Err(e) = save_image(&original_path, &foreground) {
+                        //             println!("{}", e)
+                        //         }
+                        //     }
+                        // }
                     }
 
                     ui.close_menu();
@@ -327,91 +326,91 @@ impl eframe::App for TemplateApp {
                         .add_filter("png", &["png"])
                         .save_file();
 
-                    if let Some(original_path) = file_option {
-                        // save layers
-                        if self.ui_data.overlay_textures {
-                            // if textures is selected, save them to layer and main image
-                            let max_texture_side = ctx.input(|i| i.max_texture_side);
-                            let img = self.get_textured(max_texture_side);
-                            if let Err(e) = save_image(&original_path, &img) {
-                                println!("{}", e)
-                            }
+                    // if let Some(original_path) = file_option {
+                    //     // save layers
+                    //     if self.ui_data.overlay_textures {
+                    //         // if textures is selected, save them to layer and main image
+                    //         let max_texture_side = ctx.input(|i| i.max_texture_side);
+                    //         let img = self.get_landscape_image(max_texture_side);
+                    //         if let Err(e) = save_image(&original_path, &img) {
+                    //             println!("{}", e)
+                    //         }
 
-                            if let Err(e) =
-                                save_image(&append_to_filename(&original_path, "t"), &img)
-                            {
-                                println!("{}", e)
-                            }
+                    //         if let Err(e) =
+                    //             save_image(&append_to_filename(&original_path, "t"), &img)
+                    //         {
+                    //             println!("{}", e)
+                    //         }
 
-                            if self.ui_data.overlay_terrain {
-                                // if only terrain is selected
-                                let img = self.get_background();
-                                if let Err(e) =
-                                    save_image(&append_to_filename(&original_path, "b"), &img)
-                                {
-                                    println!("{}", e)
-                                }
-                            }
+                    //         if self.ui_data.overlay_terrain {
+                    //             // if only terrain is selected
+                    //             let img = self.get_heightmap_image();
+                    //             if let Err(e) =
+                    //                 save_image(&append_to_filename(&original_path, "b"), &img)
+                    //             {
+                    //                 println!("{}", e)
+                    //             }
+                    //         }
 
-                            if self.ui_data.overlay_paths {
-                                // if only paths is selected
-                                let img = self.get_foreground();
-                                if let Err(e) =
-                                    save_image(&append_to_filename(&original_path, "f"), &img)
-                                {
-                                    println!("{}", e)
-                                }
-                            }
-                        } else if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
-                            let img = self.get_background();
-                            if let Err(e) =
-                                save_image(&append_to_filename(&original_path, "b"), &img)
-                            {
-                                println!("{}", e)
-                            }
+                    //         if self.ui_data.overlay_paths {
+                    //             // if only paths is selected
+                    //             let img = self.get_overlay_path_image();
+                    //             if let Err(e) =
+                    //                 save_image(&append_to_filename(&original_path, "f"), &img)
+                    //             {
+                    //                 println!("{}", e)
+                    //             }
+                    //         }
+                    //     } else if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
+                    //         let img = self.get_heightmap_image();
+                    //         if let Err(e) =
+                    //             save_image(&append_to_filename(&original_path, "b"), &img)
+                    //         {
+                    //             println!("{}", e)
+                    //         }
 
-                            let img2 = self.get_foreground();
-                            if let Err(e) =
-                                save_image(&append_to_filename(&original_path, "f"), &img2)
-                            {
-                                println!("{}", e)
-                            }
+                    //         let img2 = self.get_overlay_path_image();
+                    //         if let Err(e) =
+                    //             save_image(&append_to_filename(&original_path, "f"), &img2)
+                    //         {
+                    //             println!("{}", e)
+                    //         }
 
-                            // save combined to main image
-                            if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
-                                let layered_img = self.get_layered_image(img, img2);
-                                if let Err(e) = save_image(&original_path, &layered_img) {
-                                    println!("{}", e)
-                                }
-                            }
-                        } else if self.ui_data.overlay_terrain {
-                            // if only terrain is selected
-                            let img = self.get_background();
-                            if let Err(e) =
-                                save_image(&append_to_filename(&original_path, "b"), &img)
-                            {
-                                println!("{}", e)
-                            }
+                    //         // save combined to main image
+                    //         if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
+                    //             let layered_img = self.get_layered_image(img, img2);
+                    //             if let Err(e) = save_image(&original_path, &layered_img) {
+                    //                 println!("{}", e)
+                    //             }
+                    //         }
+                    //     } else if self.ui_data.overlay_terrain {
+                    //         // if only terrain is selected
+                    //         let img = self.get_heightmap_image();
+                    //         if let Err(e) =
+                    //             save_image(&append_to_filename(&original_path, "b"), &img)
+                    //         {
+                    //             println!("{}", e)
+                    //         }
 
-                            // save main
-                            if let Err(e) = save_image(&original_path, &img) {
-                                println!("{}", e)
-                            }
-                        } else if self.ui_data.overlay_paths {
-                            // if only paths is selected
-                            let img = self.get_foreground();
-                            if let Err(e) =
-                                save_image(&append_to_filename(&original_path, "f"), &img)
-                            {
-                                println!("{}", e)
-                            }
+                    //         // save main
+                    //         if let Err(e) = save_image(&original_path, &img) {
+                    //             println!("{}", e)
+                    //         }
+                    //     } else if self.ui_data.overlay_paths {
+                    //         // if only paths is selected
+                    //         let img = self.get_overlay_path_image();
+                    //         if let Err(e) =
+                    //             save_image(&append_to_filename(&original_path, "f"), &img)
+                    //         {
+                    //             println!("{}", e)
+                    //         }
 
-                            // save f as main
-                            if let Err(e) = save_image(&original_path, &img) {
-                                println!("{}", e)
-                            }
-                        }
-                    }
+                    //         // save f as main
+                    //         if let Err(e) = save_image(&original_path, &img) {
+                    //             println!("{}", e)
+                    //         }
+                    //     }
+                    // }
 
                     ui.close_menu();
                 }
