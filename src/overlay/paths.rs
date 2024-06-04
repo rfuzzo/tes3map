@@ -53,7 +53,7 @@ pub fn color_map_to_pixels(
     pixels_color
 }
 
-pub fn color_pixels_reload(
+pub fn get_color_pixels(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
     alpha: u8,

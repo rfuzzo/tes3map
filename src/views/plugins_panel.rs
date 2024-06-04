@@ -6,32 +6,35 @@ use tes3::esp::{Cell, Landscape, LandscapeTexture, Npc, Plugin, Region};
 use crate::*;
 
 impl TemplateApp {
-    pub fn plugins_panel(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context) {
+    pub fn plugins_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Plugins");
 
         // data files path and open button
-        if let Some(data_files) = &self.data_files {
-            ui.label(format!("Data files: {}", data_files.display()));
-        } else {
-            ui.label("No data files loaded");
-        }
-        // open folder button
-        if ui.button("Open folder").clicked() {
-            let folder_option = rfd::FileDialog::new().pick_folder();
-            if let Some(path) = folder_option {
-                self.data_files = Some(path.clone());
-                // populate plugins here
-                let plugins = get_plugins_sorted(&path, false);
-                let vms = plugins
-                    .iter()
-                    .map(|p| PluginViewModel::from_path(p.clone()))
-                    .collect();
-                self.plugins = Some(vms);
+        ui.horizontal(|ui| {
+            if let Some(data_files) = &self.data_files {
+                ui.label(format!("Data files: {}", data_files.display()));
+            } else {
+                ui.label("No data files loaded");
             }
-        }
+            // open folder button
+            if ui.button("🗁").clicked() {
+                let folder_option = rfd::FileDialog::new().pick_folder();
+                if let Some(path) = folder_option {
+                    self.data_files = Some(path.clone());
+                    // populate plugins here
+                    let plugins = get_plugins_sorted(&path, false);
+                    let vms = plugins
+                        .iter()
+                        .map(|p| PluginViewModel::from_path(p.clone()))
+                        .collect();
+                    self.plugins = Some(vms);
+                }
+            }
+        });
 
-        if self.data_files.is_some() && ui.button("Paint").clicked() {
+        if self.data_files.is_some() && ui.button("Load").clicked() {
             self.load_plugin_data();
+            self.reload_background(ctx, None);
         }
 
         ui.separator();
@@ -75,12 +78,23 @@ impl TemplateApp {
         let mut travels: HashMap<String, (Vec<CellKey>, String)> = HashMap::default();
         let mut npcs: HashMap<String, CellKey> = HashMap::default();
 
-        for vm in self.plugins.as_ref().unwrap().iter() {
+        let enabled_plugins: Vec<&PluginViewModel> = self
+            .plugins
+            .as_ref()
+            .unwrap()
+            .iter()
+            .filter(|p| p.enabled)
+            .collect();
+
+        for vm in enabled_plugins {
             let path = vm.path.clone();
             let mut plugin = Plugin::new();
             if plugin
                 .load_path_filtered(&path, |tag| {
-                    matches!(&tag, b"TES3" | b"LAND" | b"LTEX" | b"CELL" | b"NPC_")
+                    matches!(
+                        &tag,
+                        b"TES3" | b"LAND" | b"LTEX" | b"CELL" | b"NPC_" | b"REGN"
+                    )
                 })
                 .is_ok()
             {
@@ -194,7 +208,7 @@ impl TemplateApp {
         self.land_records = land_records;
 
         // TODO
-        // self.cells = cells;
+        self.cell_records = cells;
         // self.cell_ids = cell_id_map;
         // self.land_ids = land_id_map;
 

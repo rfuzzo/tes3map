@@ -9,6 +9,13 @@ impl TemplateApp {
 
         ui.separator();
 
+        // // TODO search bar
+        // ui.horizontal(|ui| {
+        //     ui.label("Filter: ");
+        //     ui.text_edit_singleline(&mut self.cell_filter);
+        // });
+        // ui.separator();
+
         egui::ScrollArea::vertical()
             .auto_shrink([false; 2])
             .show(ui, |ui| {

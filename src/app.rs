@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use background::landscape::compute_landscape_image;
+use background::{gamemap::generate_map, landscape::compute_landscape_image};
 use egui::{reset_button, Color32, ColorImage, Pos2};
 
 use log::{debug, error};
@@ -14,8 +14,6 @@ pub enum ESidePanelView {
     Plugins,
     Cells,
 }
-
-type PluginHash = u64;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(Default)]
@@ -35,6 +33,7 @@ pub struct TemplateApp {
     pub land_records: HashMap<CellKey, Landscape>,
     pub ltex_records: HashMap<u32, LandscapeTexture>,
     pub regn_records: HashMap<String, Region>,
+    pub cell_records: HashMap<CellKey, Cell>,
     // overlays
     pub edges: HashMap<String, Vec<(CellKey, CellKey)>>,
     pub cell_conflicts: HashMap<CellKey, Vec<u64>>,
@@ -42,9 +41,11 @@ pub struct TemplateApp {
     pub bg: Option<egui::TextureHandle>,
 
     // app
+    pub hover_pos: CellKey,
     pub side_panel_view: ESidePanelView,
     pub info: String,
     pub current_landscape: Option<Landscape>,
+    pub cell_filter: String,
 }
 
 impl TemplateApp {
@@ -92,15 +93,21 @@ impl TemplateApp {
                     // do nothing
                 }
                 EBackground::Landscape => {
-                    let landscape_img = self.get_landscape_image(max_texture_side);
+                    let image = self.get_landscape_image(max_texture_side);
                     let _: &egui::TextureHandle = self.bg.get_or_insert_with(|| {
-                        ctx.load_texture("background", landscape_img, Default::default())
+                        ctx.load_texture("background", image, Default::default())
                     });
                 }
                 EBackground::HeightMap => {
-                    let heightmap_img = self.get_heightmap_image();
+                    let image = self.get_heightmap_image();
                     let _: &egui::TextureHandle = self.bg.get_or_insert_with(|| {
-                        ctx.load_texture("background", heightmap_img, Default::default())
+                        ctx.load_texture("background", image, Default::default())
+                    });
+                }
+                EBackground::GameMap => {
+                    let image = self.get_gamemap_image();
+                    let _: &egui::TextureHandle = self.bg.get_or_insert_with(|| {
+                        ctx.load_texture("background", image, Default::default())
                     });
                 }
             }
@@ -116,6 +123,10 @@ impl TemplateApp {
             self.dimensions_z,
             self.ui_data,
         )
+    }
+
+    pub fn get_gamemap_image(&mut self) -> ColorImage {
+        generate_map(&self.dimensions, &self.land_records)
     }
 
     pub fn get_landscape_image(&mut self, max_texture_side: usize) -> ColorImage {
@@ -144,13 +155,13 @@ impl TemplateApp {
                 .show();
         }
 
-        // get textures
-        let mut texture_map = HashMap::default();
-        // TODO
-
-        if let Some(i) =
-            compute_landscape_image(dimensions, &self.land_records, &texture_map, &self.heights)
-        {
+        if let Some(i) = compute_landscape_image(
+            dimensions,
+            &self.land_records,
+            &self.ltex_records,
+            &self.data_files,
+            &self.heights,
+        ) {
             i
         } else {
             // default image
@@ -168,7 +179,7 @@ impl TemplateApp {
         let mut img2 =
             ColorImage::new(self.dimensions.pixel_size_tuple(VERTEX_CNT), Color32::WHITE);
 
-        img2.pixels.clone_from(&overlay::paths::color_pixels_reload(
+        img2.pixels.clone_from(&overlay::paths::get_color_pixels(
             &self.dimensions,
             &self.land_records,
             self.ui_data.alpha,
@@ -189,14 +200,12 @@ impl TemplateApp {
     }
 
     /// Settings popup menu
-    pub(crate) fn settings_ui(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context) {
+    pub(crate) fn settings_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.horizontal(|ui| {
             reset_button(ui, &mut self.ui_data);
 
             if ui.button("Refresh image").clicked() {
-                self.dimensions.texture_size = self.ui_data.texture_size;
-
-                // TOOD reload
+                self.reload_background(ctx, None);
             }
         });
 
@@ -222,7 +231,8 @@ impl TemplateApp {
         ui.separator();
 
         ui.label("Overlays");
-        ui.checkbox(&mut self.ui_data.overlay_paths, "Show overlay map");
+        ui.checkbox(&mut self.ui_data.overlay_paths, "Show path map");
+        ui.checkbox(&mut self.ui_data.overlay_region, "Show region map");
 
         ui.separator();
         ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");

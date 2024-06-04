@@ -1,19 +1,20 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use egui::{Color32, ColorImage};
 use log::info;
-use tes3::esp::{Landscape, LandscapeFlags};
+use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture};
 
 use crate::{
-    height_from_screen_space, overlay_colors_with_alpha, CellKey, Dimensions, DEFAULT_COLOR,
-    GRID_SIZE, TEXTURE_MAX_SIZE, VERTEX_CNT,
+    height_from_screen_space, load_texture, overlay_colors_with_alpha, CellKey, Dimensions,
+    DEFAULT_COLOR, GRID_SIZE, TEXTURE_MAX_SIZE, VERTEX_CNT,
 };
 
 /// Compute a landscape image from the given landscape records and texture map.
 pub fn compute_landscape_image(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
-    texture_map: &HashMap<u32, ColorImage>,
+    ltex_records: &HashMap<u32, LandscapeTexture>,
+    data_files: &Option<PathBuf>,
     heights: &[f32],
 ) -> Option<ColorImage> {
     let d = dimensions;
@@ -27,6 +28,8 @@ pub fn compute_landscape_image(
     );
 
     let mut pixels_color = vec![Color32::TRANSPARENT; size];
+
+    let mut texture_map = HashMap::new();
 
     for cy in d.min_y..d.max_y + 1 {
         for cx in d.min_x..d.max_x + 1 {
@@ -43,9 +46,21 @@ pub fn compute_landscape_image(
                                 let dy = (4 * (gy / 4)) + (gx / 4);
 
                                 let key = data[dy][dx] as u32;
-                                let Some(color_image) = texture_map.get(&key) else {
-                                    continue;
-                                };
+
+                                // lazy load texture
+                                let texture = texture_map.entry(key).or_insert_with(|| {
+                                    // load texture
+                                    if let Some(ltex) = ltex_records.get(&key) {
+                                        if let Some(tex) = load_texture(data_files, ltex) {
+                                            return tex;
+                                        }
+                                    }
+
+                                    ColorImage::new(
+                                        [d.texture_size, d.texture_size],
+                                        Color32::TRANSPARENT,
+                                    )
+                                });
 
                                 // textures per tile
                                 for x in 0..d.texture_size {
@@ -64,7 +79,7 @@ pub fn compute_landscape_image(
                                         let sy = y * (TEXTURE_MAX_SIZE / d.texture_size);
                                         let index = (sy * d.texture_size) + sx;
 
-                                        let mut color = color_image.pixels[index];
+                                        let mut color = texture.pixels[index];
 
                                         // blend color when under water
                                         let screenx = tx * VERTEX_CNT / d.cell_size();

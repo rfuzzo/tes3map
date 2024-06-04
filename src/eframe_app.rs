@@ -3,6 +3,7 @@ use crate::*;
 use std::env;
 
 use egui::{pos2, Color32, Pos2, Rect, Sense};
+use overlay::{paths::get_color_pixels, regions::get_region_shapes};
 
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
@@ -48,6 +49,23 @@ impl eframe::App for TemplateApp {
         egui::SidePanel::right("cell_panel").show(ctx, |ui| match self.side_panel_view {
             app::ESidePanelView::Plugins => self.plugins_panel(ui, ctx),
             app::ESidePanelView::Cells => self.cell_panel(ui, ctx),
+        });
+
+        // footer
+        egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
+            // Status Bar
+            ui.horizontal(|ui| {
+                // map bounds
+                ui.label(format!(
+                    "({},{}) - ({},{})",
+                    self.dimensions.min_x,
+                    self.dimensions.min_y,
+                    self.dimensions.max_x,
+                    self.dimensions.max_y
+                ));
+                ui.separator();
+                ui.label(get_cell_name(&self.cell_records, self.hover_pos));
+            });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -129,30 +147,46 @@ impl eframe::App for TemplateApp {
             }
 
             // TODO Overlays
-            // if self.ui_data.overlay_paths {
-            //     if let Some(texture) = &self.foreground {
-            //         painter.image(texture.into(), canvas, uv, Color32::WHITE);
-            //     }
-            // }
+            if self.ui_data.overlay_paths {
+                // let texture =
+                //     get_color_pixels(&self.dimensions, &self.land_records, self.ui_data.alpha);
+                // TODO texture handles
+                // painter.image(texture, canvas, uv, Color32::WHITE);
+            }
+            if self.ui_data.overlay_region {
+                let region_shapes = get_region_shapes(
+                    to_screen,
+                    &self.dimensions,
+                    &self.regn_records,
+                    &self.cell_records,
+                );
+                painter.extend(region_shapes);
+            }
 
             // Responses
 
             // hover
             if let Some(pointer_pos) = response.hover_pos() {
+                let cellsize = self.dimensions.cell_size();
                 let cell_pos_zeroed = from_screen * pointer_pos;
 
                 // get pixel index
-                let x = cell_pos_zeroed.x as usize;
-                let y = cell_pos_zeroed.y as usize;
+                let x = cell_pos_zeroed.x as usize / cellsize;
+                let y = cell_pos_zeroed.y as usize / cellsize;
+                // get cell grid
+                let cx = self.dimensions.tranform_to_cell_x(x as i32);
+                let cy = self.dimensions.tranform_to_cell_y(y as i32);
 
-                if let Some(value) = height_from_screen_space(&self.heights, &self.dimensions, x, y)
-                {
-                    // get cell grid
-                    let cx = self.dimensions.tranform_to_cell_x((x / VERTEX_CNT) as i32);
-                    let cy = self.dimensions.tranform_to_cell_y((y / VERTEX_CNT) as i32);
-
+                if let Some(value) = height_from_screen_space(
+                    &self.heights,
+                    &self.dimensions,
+                    cell_pos_zeroed.x as usize / VERTEX_CNT,
+                    cell_pos_zeroed.y as usize / VERTEX_CNT,
+                ) {
                     self.info = format!("({cx}, {cy}), height: {value}",);
                 }
+
+                self.hover_pos = (cx, cy);
 
                 if self.ui_data.show_tooltips {
                     egui::show_tooltip(ui.ctx(), egui::Id::new("hover_tooltip"), |ui| {

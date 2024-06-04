@@ -6,6 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use dimensions::Dimensions;
 use egui::{Color32, ColorImage, Pos2};
 use image::{
     error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
@@ -15,10 +16,11 @@ use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use seahash::hash;
 use serde::{Deserialize, Serialize};
 
-use tes3::esp::{EditorId, Landscape, LandscapeTexture, TES3Object, TypeInfo};
+use tes3::esp::{Cell, EditorId, Landscape, LandscapeTexture, TES3Object, TypeInfo};
 
 mod app;
 mod background;
+mod dimensions;
 mod eframe_app;
 mod overlay;
 mod views;
@@ -32,11 +34,13 @@ const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
 
 type CellKey = (i32, i32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum EBackground {
     None,
     Landscape,
+    #[default]
     HeightMap,
+    GameMap,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -56,6 +60,8 @@ pub struct SavedUiData {
     // overlays
     // you can have multiple overlays
     pub overlay_paths: bool,
+    pub overlay_region: bool,
+    pub overlay_grid: bool,
 
     pub show_tooltips: bool,
 
@@ -76,81 +82,15 @@ impl Default for SavedUiData {
             alpha: 100,
 
             // overlays
-            background: EBackground::None,
-            overlay_paths: true,
+            background: EBackground::default(),
+            overlay_paths: false,
+            overlay_region: false,
+            overlay_grid: false,
+
             show_tooltips: false,
 
             texture_size: 16,
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Dimensions {
-    pub min_x: i32,
-    pub min_y: i32,
-    pub max_x: i32,
-    pub max_y: i32,
-
-    pub texture_size: usize,
-}
-
-impl Default for Dimensions {
-    fn default() -> Self {
-        Self {
-            min_x: Default::default(),
-            min_y: Default::default(),
-            max_x: Default::default(),
-            max_y: Default::default(),
-            texture_size: 16,
-        }
-    }
-}
-
-impl Dimensions {
-    fn cell_size(&self) -> usize {
-        self.texture_size * GRID_SIZE
-    }
-
-    fn width(&self) -> usize {
-        (1 + self.max_x - self.min_x).max(0) as usize
-    }
-    fn height(&self) -> usize {
-        (1 + self.max_y - self.min_y).max(0) as usize
-    }
-    fn size(&self) -> usize {
-        self.width() * self.height()
-    }
-
-    fn pixel_size(&self, pixel_per_cell: usize) -> usize {
-        self.size() * pixel_per_cell * pixel_per_cell
-    }
-
-    fn pixel_size_tuple(&self, pixel_per_cell: usize) -> [usize; 2] {
-        [
-            self.width() * pixel_per_cell,
-            self.height() * pixel_per_cell,
-        ]
-    }
-
-    fn tranform_to_cell_x(&self, x: i32) -> i32 {
-        x + self.min_x
-    }
-
-    fn tranform_to_cell_y(&self, y: i32) -> i32 {
-        self.max_y - y
-    }
-
-    fn tranform_to_canvas_x(&self, x: i32) -> usize {
-        (x - self.min_x).max(0) as usize
-    }
-
-    fn tranform_to_canvas_y(&self, y: i32) -> usize {
-        (self.max_y - y).max(0) as usize
-    }
-
-    fn stride(&self, pixel_per_cell: usize) -> usize {
-        self.width() * pixel_per_cell
     }
 }
 
@@ -481,11 +421,11 @@ pub fn get_layered_image(dimensions: &Dimensions, img: ColorImage, img2: ColorIm
     layered_img
 }
 
-fn load_texture(data_files: &Option<PathBuf>, r: &LandscapeTexture) -> Option<ColorImage> {
+fn load_texture(data_files: &Option<PathBuf>, ltex: &LandscapeTexture) -> Option<ColorImage> {
     // data files
     let data_files = data_files.as_ref()?;
 
-    let texture = r.file_name.clone();
+    let texture = ltex.file_name.clone();
     let tex_path = data_files.join("Textures").join(texture);
     if !tex_path.exists() {
         return None;
@@ -514,6 +454,19 @@ fn load_texture(data_files: &Option<PathBuf>, r: &LandscapeTexture) -> Option<Co
     }
 
     None
+}
+
+pub fn get_cell_name(cells: &HashMap<CellKey, Cell>, pos: CellKey) -> String {
+    let mut name = "".to_owned();
+    if let Some(cell) = cells.get(&pos) {
+        name.clone_from(&cell.name);
+        if name.is_empty() {
+            if let Some(region) = cell.region.clone() {
+                name = region;
+            }
+        }
+    }
+    format!("{} ({},{})", name, pos.0, pos.1)
 }
 
 //////////////////////////////////////////
