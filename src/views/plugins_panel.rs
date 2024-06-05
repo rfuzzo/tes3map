@@ -83,7 +83,6 @@ impl TemplateApp {
         let mut land_records: HashMap<CellKey, Landscape> = HashMap::default();
 
         let mut cells: HashMap<CellKey, Cell> = HashMap::default();
-        let mut cell_id_map: HashMap<String, CellKey> = HashMap::default();
         let mut land_id_map: HashMap<String, CellKey> = HashMap::default();
         let mut cell_conflicts: HashMap<CellKey, Vec<u64>> = HashMap::default();
         let mut travels: HashMap<String, (Vec<CellKey>, String)> = HashMap::default();
@@ -141,7 +140,6 @@ impl TemplateApp {
 
                 // add Cells
                 for cell in plugin.objects_of_type::<Cell>() {
-                    let id: String = get_unique_id(&TES3Object::Cell(cell.clone()));
                     if cell.is_interior() {
                         continue;
                     }
@@ -163,7 +161,6 @@ impl TemplateApp {
                     }
 
                     cells.insert(key, cell.clone());
-                    cell_id_map.insert(id, key);
                 }
 
                 // add landscape
@@ -220,7 +217,6 @@ impl TemplateApp {
 
         // TODO
         self.cell_records = cells;
-        // self.cell_ids = cell_id_map;
         // self.land_ids = land_id_map;
 
         //

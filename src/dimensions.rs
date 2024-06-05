@@ -57,6 +57,13 @@ impl Dimensions {
     pub fn tranform_to_cell_y(&self, y: i32) -> i32 {
         self.max_y - y
     }
+    
+    pub fn tranform_to_cell(&self, pos: Pos2) -> CellKey {
+        (
+            self.tranform_to_cell_x(pos.x as i32 / self.cell_size() as i32),
+            self.tranform_to_cell_y(pos.y as i32 / self.cell_size() as i32),
+        )
+    }
 
     pub fn tranform_to_canvas_x(&self, x: i32) -> usize {
         (x - self.min_x).max(0) as usize

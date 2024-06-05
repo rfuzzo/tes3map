@@ -46,6 +46,7 @@ pub struct TemplateApp {
     pub regn_records: HashMap<String, Region>,
     #[serde(skip)]
     pub cell_records: HashMap<CellKey, Cell>,
+
     // overlays
     #[serde(skip)]
     pub travel_edges: HashMap<String, Vec<(CellKey, CellKey)>>,
@@ -64,6 +65,8 @@ pub struct TemplateApp {
     pub info: String,
     #[serde(skip)]
     pub current_landscape: Option<Landscape>,
+    #[serde(skip)]
+    pub selected_id: Option<CellKey>,
     #[serde(skip)]
     pub cell_filter: String,
 }

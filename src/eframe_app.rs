@@ -1,10 +1,13 @@
 use std::env;
 
+use eframe::emath::RectTransform;
+use eframe::epaint::{Rounding, Shape, Stroke};
 use egui::{Color32, pos2, Pos2, Rect, Sense};
 
 use overlay::{grid::get_grid_shapes, regions::get_region_shapes};
 
 use crate::*;
+use crate::app::ESidePanelView;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::travel::get_travel_shapes;
 
@@ -44,9 +47,22 @@ impl eframe::App for TemplateApp {
         });
 
         // right panel
-        egui::SidePanel::right("cell_panel").show(ctx, |ui| match self.side_panel_view {
-            app::ESidePanelView::Plugins => self.plugins_panel(ui, ctx),
-            app::ESidePanelView::Cells => self.cell_panel(ui, ctx),
+        egui::SidePanel::right("cell_panel").show(ctx, |ui| {
+            // tab bar
+            ui.horizontal(|ui| {
+                ui.selectable_value(
+                    &mut self.side_panel_view,
+                    ESidePanelView::Plugins,
+                    "Plugins",
+                );
+                ui.selectable_value(&mut self.side_panel_view, ESidePanelView::Cells, "Cells");
+            });
+
+            match self.side_panel_view {
+                // view
+                app::ESidePanelView::Plugins => self.plugins_panel(ui, ctx),
+                app::ESidePanelView::Cells => self.cell_panel(ui, ctx),
+            }
         });
 
         // footer
@@ -171,36 +187,52 @@ impl eframe::App for TemplateApp {
                 let shapes = get_travel_shapes(to_screen, &self.dimensions, &self.travel_edges);
                 painter.extend(shapes);
             }
+            // overlay selected cell
+            if let Some(key) = self.selected_id {
+                let rect = self.get_rect_at_cell(to_screen, key);
+                let shape =
+                    Shape::rect_stroke(rect, Rounding::default(), Stroke::new(4.0, Color32::RED));
+                painter.add(shape);
+            }
 
             // Responses
 
             // hover
             if let Some(pointer_pos) = response.hover_pos() {
-                let cellsize = self.dimensions.cell_size();
+                let key = self.cellkey_from_screen(from_screen, pointer_pos);
+                self.hover_pos = key;
+
                 let transformed_position = from_screen * pointer_pos;
-
-                // get pixel index
-                let x = transformed_position.x as usize / cellsize;
-                let y = transformed_position.y as usize / cellsize;
-                // get cell grid
-                let cx = self.dimensions.tranform_to_cell_x(x as i32);
-                let cy = self.dimensions.tranform_to_cell_y(y as i32);
-
-                self.hover_pos = (cx, cy);
-
                 if let Some(value) = height_from_screen_space(
                     &self.heights,
                     &self.dimensions,
                     transformed_position.x as usize / VERTEX_CNT,
                     transformed_position.y as usize / VERTEX_CNT,
                 ) {
-                    self.info = format!("({cx}, {cy}), height: {value}",);
+                    self.info = format!("({:?}), height: {}", key, value);
                 }
 
                 if self.ui_data.show_tooltips {
                     egui::show_tooltip(ui.ctx(), egui::Id::new("hover_tooltip"), |ui| {
                         ui.label(self.info.clone());
                     });
+                }
+            }
+
+            // click
+            if let Some(interact_pos) = painter.ctx().pointer_interact_pos() {
+                if ui.ctx().input(|i| i.pointer.primary_clicked()) {
+                    // if in the cell panel, we select the cell
+                    let key = self.cellkey_from_screen(from_screen, interact_pos);
+                    if self.cell_records.contains_key(&key) {
+                        // toggle selection
+                        if self.selected_id == Some(key) {
+                            // toggle off if the same cell is clicked
+                            self.selected_id = None;
+                        } else {
+                            self.selected_id = Some(key);
+                        }
+                    }
                 }
             }
 
@@ -258,140 +290,42 @@ impl eframe::App for TemplateApp {
                         .add_filter("png", &["png"])
                         .save_file();
 
-                    if let Some(_original_path) = file_option {
-                        // logic here:
+                    if let Some(original_path) = file_option {
+                        let mut image = None;
+                        match self.ui_data.background {
+                            EBackground::None => {}
+                            EBackground::Landscape => {}
+                            EBackground::HeightMap => {
+                                image = Some(self.get_heightmap_image());
+                            }
+                            EBackground::GameMap => {
+                                image = Some(self.get_gamemap_image());
+                            }
+                        }
 
-                        // TODO save image
+                        if let Some(image) = image {
+                            if let Err(e) = save_image(&original_path, &image) {
+                                println!("{}", e)
+                            }
+                        }
 
-                        // // if textures is selected, we just save that
-                        // if self.ui_data.overlay_textures {
-                        //     let max_texture_side = ctx.input(|i| i.max_texture_side);
-                        //     let image = self.get_textured(max_texture_side);
-                        //     if let Err(e) = save_image(&original_path, &image) {
-                        //         println!("{}", e)
-                        //     }
+                        // if self.ui_data.overlay_paths {
+                        //     todo!()
+                        // } else if self.ui_data.overlay_region {
+                        //     todo!()
+                        // } else if self.ui_data.overlay_grid {
+                        //     todo!()
+                        // } else if self.ui_data.overlay_cities {
+                        //     todo!()
+                        // } else if self.ui_data.overlay_travel {
+                        //     todo!()
                         // } else {
-                        //     // else we save the current overlayed image
-                        //     if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
-                        //         let background = self.get_background();
-                        //         let foreground = self.get_foreground();
-
-                        //         let layered_img = self.get_layered_image(background, foreground);
-                        //         if let Err(e) = save_image(&original_path, &layered_img) {
-                        //             println!("{}", e)
-                        //         }
-                        //     } else if self.ui_data.overlay_terrain {
-                        //         // only save terrain
-                        //         let background = self.get_background();
-                        //         if let Err(e) = save_image(&original_path, &background) {
-                        //             println!("{}", e)
-                        //         }
-                        //     } else if self.ui_data.overlay_paths {
-                        //         // only save overlay
-                        //         let foreground = self.get_foreground();
-                        //         if let Err(e) = save_image(&original_path, &foreground) {
-                        //             println!("{}", e)
-                        //         }
-                        //     }
+                        //     todo!()
                         // }
                     }
-
-                    ui.close_menu();
                 }
 
-                if ui.button("Save active layers").clicked() {
-                    let _file_option = rfd::FileDialog::new()
-                        .add_filter("png", &["png"])
-                        .save_file();
-
-                    // if let Some(original_path) = file_option {
-                    //     // save layers
-                    //     if self.ui_data.overlay_textures {
-                    //         // if textures is selected, save them to layer and main image
-                    //         let max_texture_side = ctx.input(|i| i.max_texture_side);
-                    //         let img = self.get_landscape_image(max_texture_side);
-                    //         if let Err(e) = save_image(&original_path, &img) {
-                    //             println!("{}", e)
-                    //         }
-
-                    //         if let Err(e) =
-                    //             save_image(&append_to_filename(&original_path, "t"), &img)
-                    //         {
-                    //             println!("{}", e)
-                    //         }
-
-                    //         if self.ui_data.overlay_terrain {
-                    //             // if only terrain is selected
-                    //             let img = self.get_heightmap_image();
-                    //             if let Err(e) =
-                    //                 save_image(&append_to_filename(&original_path, "b"), &img)
-                    //             {
-                    //                 println!("{}", e)
-                    //             }
-                    //         }
-
-                    //         if self.ui_data.overlay_paths {
-                    //             // if only paths is selected
-                    //             let img = self.get_overlay_path_image();
-                    //             if let Err(e) =
-                    //                 save_image(&append_to_filename(&original_path, "f"), &img)
-                    //             {
-                    //                 println!("{}", e)
-                    //             }
-                    //         }
-                    //     } else if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
-                    //         let img = self.get_heightmap_image();
-                    //         if let Err(e) =
-                    //             save_image(&append_to_filename(&original_path, "b"), &img)
-                    //         {
-                    //             println!("{}", e)
-                    //         }
-
-                    //         let img2 = self.get_overlay_path_image();
-                    //         if let Err(e) =
-                    //             save_image(&append_to_filename(&original_path, "f"), &img2)
-                    //         {
-                    //             println!("{}", e)
-                    //         }
-
-                    //         // save combined to main image
-                    //         if self.ui_data.overlay_terrain && self.ui_data.overlay_paths {
-                    //             let layered_img = self.get_layered_image(img, img2);
-                    //             if let Err(e) = save_image(&original_path, &layered_img) {
-                    //                 println!("{}", e)
-                    //             }
-                    //         }
-                    //     } else if self.ui_data.overlay_terrain {
-                    //         // if only terrain is selected
-                    //         let img = self.get_heightmap_image();
-                    //         if let Err(e) =
-                    //             save_image(&append_to_filename(&original_path, "b"), &img)
-                    //         {
-                    //             println!("{}", e)
-                    //         }
-
-                    //         // save main
-                    //         if let Err(e) = save_image(&original_path, &img) {
-                    //             println!("{}", e)
-                    //         }
-                    //     } else if self.ui_data.overlay_paths {
-                    //         // if only paths is selected
-                    //         let img = self.get_overlay_path_image();
-                    //         if let Err(e) =
-                    //             save_image(&append_to_filename(&original_path, "f"), &img)
-                    //         {
-                    //             println!("{}", e)
-                    //         }
-
-                    //         // save f as main
-                    //         if let Err(e) = save_image(&original_path, &img) {
-                    //             println!("{}", e)
-                    //         }
-                    //     }
-                    // }
-
-                    ui.close_menu();
-                }
+                ui.close_menu();
             });
         });
     }
@@ -399,5 +333,23 @@ impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, eframe::APP_KEY, self);
+    }
+}
+
+impl TemplateApp {
+    fn cellkey_from_screen(&mut self, from_screen: RectTransform, pointer_pos: Pos2) -> CellKey {
+        let transformed_position = from_screen * pointer_pos;
+        // get cell grid
+        self.dimensions
+            .tranform_to_cell(Pos2::new(transformed_position.x, transformed_position.y))
+    }
+
+    fn get_rect_at_cell(&mut self, to_screen: RectTransform, key: CellKey) -> Rect {
+        let cell_size = self.dimensions.cell_size();
+        let p00x = cell_size * self.dimensions.tranform_to_canvas_x(key.0);
+        let p00y = cell_size * self.dimensions.tranform_to_canvas_y(key.1);
+        let p00 = Pos2::new(p00x as f32, p00y as f32);
+        let p11 = Pos2::new((p00x + cell_size) as f32, (p00y + cell_size) as f32);
+        Rect::from_two_pos(to_screen * p00, to_screen * p11)
     }
 }
