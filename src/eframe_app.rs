@@ -3,7 +3,7 @@ use crate::*;
 use std::env;
 
 use egui::{pos2, Color32, Pos2, Rect, Sense};
-use overlay::{paths::get_color_pixels, regions::get_region_shapes};
+use overlay::{grid::get_grid_shapes, paths::get_color_pixels, regions::get_region_shapes};
 
 impl eframe::App for TemplateApp {
     /// Called by the frame work to save state before shutdown.
@@ -162,31 +162,35 @@ impl eframe::App for TemplateApp {
                 );
                 painter.extend(region_shapes);
             }
+            if self.ui_data.overlay_grid {
+                let grid_shapes = get_grid_shapes(to_screen, &self.dimensions);
+                painter.extend(grid_shapes);
+            }
 
             // Responses
 
             // hover
             if let Some(pointer_pos) = response.hover_pos() {
                 let cellsize = self.dimensions.cell_size();
-                let cell_pos_zeroed = from_screen * pointer_pos;
+                let transformed_position = from_screen * pointer_pos;
 
                 // get pixel index
-                let x = cell_pos_zeroed.x as usize / cellsize;
-                let y = cell_pos_zeroed.y as usize / cellsize;
+                let x = transformed_position.x as usize / cellsize;
+                let y = transformed_position.y as usize / cellsize;
                 // get cell grid
                 let cx = self.dimensions.tranform_to_cell_x(x as i32);
                 let cy = self.dimensions.tranform_to_cell_y(y as i32);
 
+                self.hover_pos = (cx, cy);
+
                 if let Some(value) = height_from_screen_space(
                     &self.heights,
                     &self.dimensions,
-                    cell_pos_zeroed.x as usize / VERTEX_CNT,
-                    cell_pos_zeroed.y as usize / VERTEX_CNT,
+                    transformed_position.x as usize / VERTEX_CNT,
+                    transformed_position.y as usize / VERTEX_CNT,
                 ) {
                     self.info = format!("({cx}, {cy}), height: {value}",);
                 }
-
-                self.hover_pos = (cx, cy);
 
                 if self.ui_data.show_tooltips {
                     egui::show_tooltip(ui.ctx(), egui::Id::new("hover_tooltip"), |ui| {

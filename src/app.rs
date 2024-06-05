@@ -233,6 +233,7 @@ impl TemplateApp {
         ui.label("Overlays");
         ui.checkbox(&mut self.ui_data.overlay_paths, "Show path map");
         ui.checkbox(&mut self.ui_data.overlay_region, "Show region map");
+        ui.checkbox(&mut self.ui_data.overlay_grid, "Show grid");
 
         ui.separator();
         ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");
