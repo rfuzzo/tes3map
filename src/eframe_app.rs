@@ -1,16 +1,14 @@
-use crate::*;
-
 use std::env;
 
-use egui::{pos2, Color32, Pos2, Rect, Sense};
-use overlay::{grid::get_grid_shapes, paths::get_color_pixels, regions::get_region_shapes};
+use egui::{Color32, pos2, Pos2, Rect, Sense};
+
+use overlay::{grid::get_grid_shapes, regions::get_region_shapes};
+
+use crate::*;
+use crate::overlay::cities::get_cities_shapes;
+use crate::overlay::travel::get_travel_shapes;
 
 impl eframe::App for TemplateApp {
-    /// Called by the frame work to save state before shutdown.
-    // fn save(&mut self, storage: &mut dyn eframe::Storage) {
-    //     eframe::set_value(storage, eframe::APP_KEY, self);
-    // }
-
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // on start, we check the current folder for esps
@@ -130,8 +128,7 @@ impl eframe::App for TemplateApp {
             let pixel_width = self.dimensions.width() as f32 * self.dimensions.cell_size() as f32;
             let pixel_height = self.dimensions.height() as f32 * self.dimensions.cell_size() as f32;
             let to = canvas;
-            let from: Rect =
-                egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
+            let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
             let to_screen = egui::emath::RectTransform::from_to(from, to);
             let from_screen = to_screen.inverse();
 
@@ -154,17 +151,25 @@ impl eframe::App for TemplateApp {
                 // painter.image(texture, canvas, uv, Color32::WHITE);
             }
             if self.ui_data.overlay_region {
-                let region_shapes = get_region_shapes(
+                let shapes = get_region_shapes(
                     to_screen,
                     &self.dimensions,
                     &self.regn_records,
                     &self.cell_records,
                 );
-                painter.extend(region_shapes);
+                painter.extend(shapes);
             }
             if self.ui_data.overlay_grid {
-                let grid_shapes = get_grid_shapes(to_screen, &self.dimensions);
-                painter.extend(grid_shapes);
+                let shapes = get_grid_shapes(to_screen, &self.dimensions);
+                painter.extend(shapes);
+            }
+            if self.ui_data.overlay_cities {
+                let shapes = get_cities_shapes(to_screen, &self.dimensions, &self.cell_records);
+                painter.extend(shapes);
+            }
+            if self.ui_data.overlay_travel {
+                let shapes = get_travel_shapes(to_screen, &self.dimensions, &self.travel_edges);
+                painter.extend(shapes);
             }
 
             // Responses
@@ -228,7 +233,7 @@ impl eframe::App for TemplateApp {
 
             // settings
             // dumb ui hack
-            let settings_rect = egui::Rect::from_min_max(response.rect.min, pos2(0.0, 0.0));
+            let settings_rect = Rect::from_min_max(response.rect.min, pos2(0.0, 0.0));
             ui.put(settings_rect, egui::Label::new(""));
 
             egui::Frame::popup(ui.style())
@@ -253,7 +258,7 @@ impl eframe::App for TemplateApp {
                         .add_filter("png", &["png"])
                         .save_file();
 
-                    if let Some(original_path) = file_option {
+                    if let Some(_original_path) = file_option {
                         // logic here:
 
                         // TODO save image
@@ -295,7 +300,7 @@ impl eframe::App for TemplateApp {
                 }
 
                 if ui.button("Save active layers").clicked() {
-                    let file_option = rfd::FileDialog::new()
+                    let _file_option = rfd::FileDialog::new()
                         .add_filter("png", &["png"])
                         .save_file();
 
@@ -389,5 +394,10 @@ impl eframe::App for TemplateApp {
                 }
             });
         });
+    }
+
+    /// Called by the frame work to save state before shutdown.
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, self);
     }
 }

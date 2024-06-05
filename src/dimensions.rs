@@ -1,4 +1,6 @@
-use crate::GRID_SIZE;
+use egui::Pos2;
+
+use crate::{CellKey, GRID_SIZE};
 
 #[derive(Debug, Clone)]
 pub struct Dimensions {
@@ -58,6 +60,13 @@ impl Dimensions {
 
     pub fn tranform_to_canvas_x(&self, x: i32) -> usize {
         (x - self.min_x).max(0) as usize
+    }
+
+    pub fn tranform_to_canvas(&self, cell_key: CellKey) -> Pos2 {
+        Pos2::new(
+            self.tranform_to_canvas_x(cell_key.0) as f32,
+            self.tranform_to_canvas_y(cell_key.1) as f32,
+        )
     }
 
     pub fn tranform_to_canvas_y(&self, y: i32) -> usize {

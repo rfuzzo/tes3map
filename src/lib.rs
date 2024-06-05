@@ -6,17 +6,18 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use dimensions::Dimensions;
 use egui::{Color32, ColorImage, Pos2};
 use image::{
-    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
-    DynamicImage, ImageError, RgbaImage,
+    DynamicImage,
+    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind}, ImageError, RgbaImage,
 };
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 use seahash::hash;
 use serde::{Deserialize, Serialize};
-
 use tes3::esp::{Cell, EditorId, Landscape, LandscapeTexture, TES3Object, TypeInfo};
+
+pub use app::TemplateApp;
+use dimensions::Dimensions;
 
 mod app;
 mod background;
@@ -24,8 +25,6 @@ mod dimensions;
 mod eframe_app;
 mod overlay;
 mod views;
-
-pub use app::TemplateApp;
 
 const TEXTURE_MAX_SIZE: usize = 256;
 const GRID_SIZE: usize = 16;
@@ -43,7 +42,7 @@ pub enum EBackground {
     GameMap,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct SavedUiData {
     pub depth_spectrum: i32,
     pub depth_base: Color32,
@@ -62,10 +61,10 @@ pub struct SavedUiData {
     pub overlay_paths: bool,
     pub overlay_region: bool,
     pub overlay_grid: bool,
+    pub overlay_cities: bool,
+    pub overlay_travel: bool,
 
     pub show_tooltips: bool,
-
-    //#[serde(skip)]
     pub texture_size: usize,
 }
 
@@ -86,6 +85,8 @@ impl Default for SavedUiData {
             overlay_paths: false,
             overlay_region: false,
             overlay_grid: false,
+            overlay_cities: false,
+            overlay_travel: false,
 
             show_tooltips: false,
 
@@ -150,7 +151,7 @@ where
 {
     // get all plugins
     let mut results: Vec<PathBuf> = vec![];
-    if let Ok(plugins) = std::fs::read_dir(path) {
+    if let Ok(plugins) = fs::read_dir(path) {
         plugins.for_each(|p| {
             if let Ok(file) = p {
                 let file_path = file.path();
@@ -320,7 +321,7 @@ fn append_to_filename(path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(path.parent().unwrap()).join(format!("{}.{}", new_stem, extension))
 }
 
-fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), image::ImageError> {
+fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), ImageError> {
     // get image
 
     let pixels = color_image.as_raw();

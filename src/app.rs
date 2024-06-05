@@ -1,10 +1,10 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use background::{gamemap::generate_map, landscape::compute_landscape_image};
-use egui::{reset_button, Color32, ColorImage, Pos2};
-
+use egui::{Color32, ColorImage, Pos2, reset_button};
 use log::{debug, error};
 use tes3::esp::{Landscape, Region};
+
+use background::{gamemap::generate_map, landscape::compute_landscape_image};
 
 use crate::*;
 
@@ -16,49 +16,67 @@ pub enum ESidePanelView {
 }
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(Default)]
+#[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct TemplateApp {
-    // ui
+    pub data_files: Option<PathBuf>,
     pub ui_data: SavedUiData,
+
+    // ui
+    #[serde(skip)]
     pub zoom_data: ZoomData,
+    #[serde(skip)]
     pub dimensions: Dimensions,
+    #[serde(skip)]
     pub dimensions_z: DimensionsZ,
+    #[serde(skip)]
     pub heights: Vec<f32>,
 
     // tes3
-    pub data_files: Option<PathBuf>,
+    #[serde(skip)]
     pub plugins: Option<Vec<PluginViewModel>>,
 
     // runtime data
+    #[serde(skip)]
     pub land_records: HashMap<CellKey, Landscape>,
+    #[serde(skip)]
     pub ltex_records: HashMap<u32, LandscapeTexture>,
+    #[serde(skip)]
     pub regn_records: HashMap<String, Region>,
+    #[serde(skip)]
     pub cell_records: HashMap<CellKey, Cell>,
     // overlays
-    pub edges: HashMap<String, Vec<(CellKey, CellKey)>>,
+    #[serde(skip)]
+    pub travel_edges: HashMap<String, Vec<(CellKey, CellKey)>>,
+    #[serde(skip)]
     pub cell_conflicts: HashMap<CellKey, Vec<u64>>,
     // textures in memory
+    #[serde(skip)]
     pub bg: Option<egui::TextureHandle>,
 
     // app
+    #[serde(skip)]
     pub hover_pos: CellKey,
+    #[serde(skip)]
     pub side_panel_view: ESidePanelView,
+    #[serde(skip)]
     pub info: String,
+    #[serde(skip)]
     pub current_landscape: Option<Landscape>,
+    #[serde(skip)]
     pub cell_filter: String,
 }
 
 impl TemplateApp {
     /// Called once before the first frame.
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
-        // if let Some(storage) = cc.storage {
-        //     return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        // }
+        if let Some(storage) = cc.storage {
+            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        }
 
         Default::default()
     }
@@ -231,9 +249,11 @@ impl TemplateApp {
         ui.separator();
 
         ui.label("Overlays");
-        ui.checkbox(&mut self.ui_data.overlay_paths, "Show path map");
-        ui.checkbox(&mut self.ui_data.overlay_region, "Show region map");
-        ui.checkbox(&mut self.ui_data.overlay_grid, "Show grid");
+        ui.checkbox(&mut self.ui_data.overlay_paths, "Show paths");
+        ui.checkbox(&mut self.ui_data.overlay_region, "Show regions");
+        ui.checkbox(&mut self.ui_data.overlay_grid, "Show cell grid");
+        ui.checkbox(&mut self.ui_data.overlay_cities, "Show cities");
+        ui.checkbox(&mut self.ui_data.overlay_travel, "Show travel");
 
         ui.separator();
         ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");

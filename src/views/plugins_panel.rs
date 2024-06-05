@@ -9,6 +9,17 @@ impl TemplateApp {
     pub fn plugins_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Plugins");
 
+        if self.plugins.is_none() && self.data_files.is_some() {
+            // populate plugins here
+            let path = self.data_files.as_ref().unwrap();
+            let plugins = get_plugins_sorted(&path, false);
+            let vms = plugins
+                .iter()
+                .map(|p| PluginViewModel::from_path(p.clone()))
+                .collect();
+            self.plugins = Some(vms);
+        }
+
         // data files path and open button
         ui.horizontal(|ui| {
             if let Some(data_files) = &self.data_files {
@@ -65,7 +76,7 @@ impl TemplateApp {
         self.land_records.clear();
         self.ltex_records.clear();
         self.regn_records.clear();
-        self.edges.clear();
+        self.travel_edges.clear();
         self.cell_conflicts.clear();
 
         // load plugins into memory
@@ -198,7 +209,7 @@ impl TemplateApp {
                 v.push(pair);
             }
         }
-        self.edges = ordered_edges;
+        self.travel_edges = ordered_edges;
 
         // get final list of cells
         for (k, v) in cell_conflicts.iter().filter(|p| p.1.len() > 1) {

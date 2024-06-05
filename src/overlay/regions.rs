@@ -11,9 +11,11 @@ pub fn get_region_shapes(
     regn_records: &HashMap<String, Region>,
     cell_records: &HashMap<CellKey, Cell>,
 ) -> Vec<Shape> {
-    let mut shapes: Vec<Shape> = vec![];
-
     let cell_size = dimensions.cell_size();
+
+    let shapes_len =
+        (dimensions.max_x - dimensions.min_x + 1) * (dimensions.max_y - dimensions.min_y + 1);
+    let mut shapes: Vec<Shape> = Vec::with_capacity(shapes_len as usize);
 
     for cy in dimensions.min_y..dimensions.max_y + 1 {
         for cx in dimensions.min_x..dimensions.max_x + 1 {

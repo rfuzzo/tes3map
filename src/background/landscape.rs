@@ -5,8 +5,8 @@ use log::info;
 use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture};
 
 use crate::{
-    height_from_screen_space, load_texture, overlay_colors_with_alpha, CellKey, Dimensions,
-    DEFAULT_COLOR, GRID_SIZE, TEXTURE_MAX_SIZE, VERTEX_CNT,
+    CellKey, DEFAULT_COLOR, Dimensions, GRID_SIZE, height_from_screen_space,
+    load_texture, overlay_colors_with_alpha, TEXTURE_MAX_SIZE, VERTEX_CNT,
 };
 
 /// Compute a landscape image from the given landscape records and texture map.
@@ -52,15 +52,15 @@ pub fn compute_landscape_image(
                                     // load texture
                                     if let Some(ltex) = ltex_records.get(&key) {
                                         if let Some(tex) = load_texture(data_files, ltex) {
-                                            return tex;
+                                            return Some(tex);
                                         }
                                     }
 
-                                    ColorImage::new(
-                                        [d.texture_size, d.texture_size],
-                                        Color32::TRANSPARENT,
-                                    )
+                                    None
                                 });
+                                if texture.is_none() {
+                                    continue;
+                                }
 
                                 // textures per tile
                                 for x in 0..d.texture_size {
@@ -79,7 +79,7 @@ pub fn compute_landscape_image(
                                         let sy = y * (TEXTURE_MAX_SIZE / d.texture_size);
                                         let index = (sy * d.texture_size) + sx;
 
-                                        let mut color = texture.pixels[index];
+                                        let mut color = texture.as_ref().unwrap().pixels[index];
 
                                         // blend color when under water
                                         let screenx = tx * VERTEX_CNT / d.cell_size();

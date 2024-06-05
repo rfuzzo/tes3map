@@ -9,10 +9,12 @@ pub fn generate_map(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
 ) -> ColorImage {
-    // TODO use slice
-    let mut map: Vec<Color32> = vec![];
     let height = dimensions.height();
     let width = dimensions.width();
+
+    // calculate map size
+    let map_len = height * width;
+    let mut map: Vec<Color32> = Vec::with_capacity(map_len);
 
     for grid_y in 0..height {
         for grid_x in (0..width).rev() {
