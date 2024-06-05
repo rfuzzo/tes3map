@@ -1,11 +1,5 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
-mod app;
-mod eframe_app;
-
-pub use app::TemplateApp;
-use tes3::esp::{Landscape, LandscapeFlags};
-
 use std::{
     collections::HashMap,
     fs,
@@ -14,20 +8,41 @@ use std::{
 
 use egui::{Color32, ColorImage, Pos2};
 use image::{
-    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
-    DynamicImage, ImageError, RgbaImage,
+    DynamicImage,
+    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind}, ImageError, RgbaImage,
 };
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
+use seahash::hash;
+use serde::{Deserialize, Serialize};
+use tes3::esp::{Cell, EditorId, Landscape, LandscapeTexture, TES3Object, TypeInfo};
+
+pub use app::TemplateApp;
+use dimensions::Dimensions;
+
+mod app;
+mod background;
+mod dimensions;
+mod eframe_app;
+mod overlay;
+mod views;
 
 const TEXTURE_MAX_SIZE: usize = 256;
 const GRID_SIZE: usize = 16;
-
 const VERTEX_CNT: usize = 65;
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
 
 type CellKey = (i32, i32);
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum EBackground {
+    None,
+    Landscape,
+    HeightMap,
+    #[default]
+    GameMap,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct SavedUiData {
     pub depth_spectrum: i32,
     pub depth_base: Color32,
@@ -37,11 +52,20 @@ pub struct SavedUiData {
 
     pub alpha: u8,
 
-    pub overlay_terrain: bool,
-    pub overlay_paths: bool,
-    pub overlay_textures: bool,
-    pub show_tooltips: bool,
+    // background
+    // you can only have one background
+    pub background: EBackground,
 
+    // overlays
+    // you can have multiple overlays
+    pub overlay_paths: bool,
+    pub overlay_region: bool,
+    pub overlay_grid: bool,
+    pub overlay_cities: bool,
+    pub overlay_travel: bool,
+    pub overlay_conflicts: bool,
+
+    pub show_tooltips: bool,
     pub texture_size: usize,
 }
 
@@ -58,82 +82,18 @@ impl Default for SavedUiData {
             alpha: 100,
 
             // overlays
-            overlay_terrain: true,
-            overlay_paths: true,
-            overlay_textures: false,
+            background: EBackground::default(),
+            overlay_paths: false,
+            overlay_region: false,
+            overlay_grid: false,
+            overlay_cities: false,
+            overlay_travel: false,
+            overlay_conflicts: false,
+
             show_tooltips: false,
 
             texture_size: 16,
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Dimensions {
-    pub min_x: i32,
-    pub min_y: i32,
-    pub max_x: i32,
-    pub max_y: i32,
-
-    pub texture_size: usize,
-}
-
-impl Default for Dimensions {
-    fn default() -> Self {
-        Self {
-            min_x: Default::default(),
-            min_y: Default::default(),
-            max_x: Default::default(),
-            max_y: Default::default(),
-            texture_size: 16,
-        }
-    }
-}
-
-impl Dimensions {
-    fn cell_size(&self) -> usize {
-        self.texture_size * GRID_SIZE
-    }
-
-    fn width(&self) -> usize {
-        (1 + self.max_x - self.min_x).max(0) as usize
-    }
-    fn height(&self) -> usize {
-        (1 + self.max_y - self.min_y).max(0) as usize
-    }
-    fn size(&self) -> usize {
-        self.width() * self.height()
-    }
-
-    fn pixel_size(&self, pixel_per_cell: usize) -> usize {
-        self.size() * pixel_per_cell * pixel_per_cell
-    }
-
-    fn pixel_size_tuple(&self, pixel_per_cell: usize) -> [usize; 2] {
-        [
-            self.width() * pixel_per_cell,
-            self.height() * pixel_per_cell,
-        ]
-    }
-
-    fn tranform_to_cell_x(&self, x: i32) -> i32 {
-        x + self.min_x
-    }
-
-    fn tranform_to_cell_y(&self, y: i32) -> i32 {
-        self.max_y - y
-    }
-
-    fn tranform_to_canvas_x(&self, x: i32) -> usize {
-        (x - self.min_x).max(0) as usize
-    }
-
-    fn tranform_to_canvas_y(&self, y: i32) -> usize {
-        (self.max_y - y).max(0) as usize
-    }
-
-    fn stride(&self, pixel_per_cell: usize) -> usize {
-        self.width() * pixel_per_cell
     }
 }
 
@@ -165,6 +125,27 @@ impl Default for ZoomData {
     }
 }
 
+#[derive(Default, Clone)]
+pub struct PluginViewModel {
+    pub hash: u64,
+    pub path: PathBuf,
+    pub enabled: bool,
+}
+impl PluginViewModel {
+    pub fn get_name(&self) -> String {
+        self.path.file_name().unwrap().to_string_lossy().to_string()
+    }
+    // from path
+    pub fn from_path(path: PathBuf) -> Self {
+        let hash = hash(path.to_str().unwrap_or_default().as_bytes());
+        Self {
+            hash,
+            path,
+            enabled: false,
+        }
+    }
+}
+
 /// Get all plugins (esp, omwaddon, omwscripts) in a folder
 fn get_plugins_in_folder<P>(path: &P, use_omw_plugins: bool) -> Vec<PathBuf>
 where
@@ -172,7 +153,7 @@ where
 {
     // get all plugins
     let mut results: Vec<PathBuf> = vec![];
-    if let Ok(plugins) = std::fs::read_dir(path) {
+    if let Ok(plugins) = fs::read_dir(path) {
         plugins.for_each(|p| {
             if let Ok(file) = p {
                 let file_path = file.path();
@@ -215,18 +196,6 @@ where
             )
     });
     plugins
-}
-
-fn get_color_for_height(value: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> Color32 {
-    if value < dimensions.min_z {
-        return Color32::TRANSPARENT;
-    }
-
-    if value < 0.0 {
-        depth_to_color(value, dimensions, ui_data)
-    } else {
-        height_to_color(value, dimensions, ui_data)
-    }
 }
 
 fn height_to_color(height: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> Color32 {
@@ -282,112 +251,25 @@ fn depth_to_color(depth: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> 
     Color32::from_rgb(c.red, c.green, c.blue)
 }
 
-fn color_map_to_pixels(
-    dimensions: Dimensions,
-    color_map: HashMap<CellKey, [[Color32; 65]; 65]>,
-) -> Vec<Color32> {
-    // dimensions
-    let max_x = dimensions.max_x;
-    let min_x = dimensions.min_x;
-    let max_y = dimensions.max_y;
-    let min_y = dimensions.min_y;
-
-    let nx = dimensions.width() * VERTEX_CNT;
-    let ny = dimensions.height() * VERTEX_CNT;
-    let size = nx * ny;
-    let mut pixels_color = vec![Color32::WHITE; size];
-
-    for cy in min_y..max_y + 1 {
-        for cx in min_x..max_x + 1 {
-            let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx);
-            let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy);
-
-            if let Some(colors) = color_map.get(&(cx, cy)) {
-                for (y, row) in colors.iter().rev().enumerate() {
-                    for (x, value) in row.iter().enumerate() {
-                        let tx = tx + x;
-                        let ty = ty + y;
-
-                        let i = (ty * nx) + tx;
-                        pixels_color[i] = *value;
-                    }
-                }
-            } else {
-                for y in 0..VERTEX_CNT {
-                    for x in 0..VERTEX_CNT {
-                        let tx = tx + x;
-                        let ty = ty + y;
-
-                        let i = (ty * nx) + tx;
-
-                        pixels_color[i] = DEFAULT_COLOR;
-                    }
-                }
-            }
-        }
-    }
-
-    pixels_color
-}
-
-fn height_map_to_pixel_heights(
+/// Get the height from the screen space.
+pub fn height_from_screen_space(
+    heights: &[f32],
     dimensions: &Dimensions,
-    dimensions_z: DimensionsZ,
-    heights_map: HashMap<CellKey, [[f32; 65]; 65]>,
-) -> Vec<f32> {
-    // dimensions
-    let max_x = dimensions.max_x;
-    let min_x = dimensions.min_x;
-    let max_y = dimensions.max_y;
-    let min_y = dimensions.min_y;
-
-    let size = dimensions.pixel_size(VERTEX_CNT);
-    // hack to paint unset tiles
-    let mut pixels = vec![dimensions_z.min_z - 1_f32; size];
-
-    for cy in min_y..max_y + 1 {
-        for cx in min_x..max_x + 1 {
-            if let Some(heights) = heights_map.get(&(cx, cy)) {
-                // look up heightmap
-                for (y, row) in heights.iter().rev().enumerate() {
-                    for (x, value) in row.iter().enumerate() {
-                        let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
-                        let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
-
-                        let i = (ty * dimensions.stride(VERTEX_CNT)) + tx;
-                        pixels[i] = *value;
-                    }
-                }
-            } else {
-                for y in 0..VERTEX_CNT {
-                    for x in 0..VERTEX_CNT {
-                        let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
-                        let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
-
-                        let i = (ty * dimensions.stride(VERTEX_CNT)) + tx;
-                        pixels[i] = dimensions_z.min_z - 1_f32;
-                    }
-                }
-            }
-        }
-    }
-
-    pixels
+    x: usize,
+    y: usize,
+) -> Option<f32> {
+    let i = (y * dimensions.stride(VERTEX_CNT)) + x;
+    heights.get(i).copied()
 }
 
-fn create_image(
-    pixels: &[f32],
-    size: [usize; 2],
-    dimensions_z: DimensionsZ,
-    ui_data: SavedUiData,
-) -> ColorImage {
-    let mut img = ColorImage::new(size, Color32::WHITE);
-    let p = pixels
-        .iter()
-        .map(|f| get_color_for_height(*f, dimensions_z, ui_data))
-        .collect::<Vec<_>>();
-    img.pixels = p;
-    img
+/// Overlay two colors with alpha.
+fn overlay_colors_with_alpha(color1: Color32, color2: Color32, alpha1: f32) -> Color32 {
+    let alpha2 = 1_f32 - alpha1;
+    let r = (alpha1 * color1.r() as f32 + alpha2 * color2.r() as f32) as u8;
+    let g = (alpha1 * color1.g() as f32 + alpha2 * color2.g() as f32) as u8;
+    let b = (alpha1 * color1.b() as f32 + alpha2 * color2.b() as f32) as u8;
+
+    Color32::from_rgba_premultiplied(r, g, b, 255)
 }
 
 fn overlay_colors(color1: Color32, color2: Color32) -> Color32 {
@@ -402,28 +284,7 @@ fn overlay_colors(color1: Color32, color2: Color32) -> Color32 {
     Color32::from_rgba_premultiplied(r, g, b, a as u8)
 }
 
-fn overlay_colors_with_alpha(color1: Color32, color2: Color32, alpha1: f32) -> Color32 {
-    let alpha2 = 1_f32 - alpha1;
-    let r = (alpha1 * color1.r() as f32 + alpha2 * color2.r() as f32) as u8;
-    let g = (alpha1 * color1.g() as f32 + alpha2 * color2.g() as f32) as u8;
-    let b = (alpha1 * color1.b() as f32 + alpha2 * color2.b() as f32) as u8;
-
-    Color32::from_rgba_premultiplied(r, g, b, 255)
-}
-
-fn append_to_filename(path: &Path, suffix: &str) -> PathBuf {
-    // Get the stem (filename without extension) and extension from the original path
-    let stem = path.file_stem().unwrap().to_str().unwrap();
-    let extension = path.extension().map_or("", |ext| ext.to_str().unwrap());
-
-    // Append a number to the stem (filename)
-    let new_stem = format!("{}_{}", stem, suffix);
-
-    // Create a new PathBuf with the modified stem and the same extension
-    PathBuf::from(path.parent().unwrap()).join(format!("{}.{}", new_stem, extension))
-}
-
-fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), image::ImageError> {
+fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), ImageError> {
     // get image
 
     let pixels = color_image.as_raw();
@@ -448,7 +309,7 @@ fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), image::ImageE
 }
 
 fn calculate_dimensions(
-    landscape_records: &HashMap<CellKey, (u64, Landscape)>,
+    landscape_records: &HashMap<CellKey, Landscape>,
     texture_size: usize,
 ) -> Option<Dimensions> {
     let mut min_x: Option<i32> = None;
@@ -505,74 +366,78 @@ fn calculate_dimensions(
     Some(dimensions)
 }
 
-fn calculate_heights(
-    landscape_records: &HashMap<CellKey, (u64, Landscape)>,
-    dimensions: &Dimensions,
-) -> Option<(Vec<f32>, DimensionsZ)> {
-    let mut min_z: Option<f32> = None;
-    let mut max_z: Option<f32> = None;
-    let mut heights_map: HashMap<CellKey, [[f32; 65]; 65]> = HashMap::default();
+pub fn get_layered_image(dimensions: &Dimensions, img: ColorImage, img2: ColorImage) -> ColorImage {
+    // base image
+    let mut layered = img.pixels.clone();
 
-    for cy in dimensions.min_y..dimensions.max_y + 1 {
-        for cx in dimensions.min_x..dimensions.max_x + 1 {
-            if let Some((_hash, landscape)) = landscape_records.get(&(cx, cy)) {
-                if landscape
-                    .landscape_flags
-                    .contains(LandscapeFlags::USES_VERTEX_HEIGHTS_AND_NORMALS)
-                {
-                    // get vertex data
-                    // get data
-                    let data = &landscape.vertex_heights.data;
-                    let mut heights: [[f32; 65]; 65] = [[0.0; VERTEX_CNT]; VERTEX_CNT];
-                    for y in 0..VERTEX_CNT {
-                        for x in 0..VERTEX_CNT {
-                            heights[y][x] = data[y][x] as f32;
-                        }
-                    }
+    // overlay second image
+    for (i, color1) in img.pixels.into_iter().enumerate() {
+        let color2 = img2.pixels[i];
+        layered[i] = overlay_colors(color1, color2);
+    }
 
-                    // decode
-                    let mut offset: f32 = landscape.vertex_heights.offset;
-                    for row in heights.iter_mut().take(VERTEX_CNT) {
-                        for x in row.iter_mut().take(VERTEX_CNT) {
-                            offset += *x;
-                            *x = offset;
-                        }
-                        offset = row[0];
-                    }
+    // create new colorImage
+    let mut layered_img = ColorImage::new(
+        dimensions.pixel_size_tuple(VERTEX_CNT),
+        Color32::TRANSPARENT,
+    );
+    layered_img.pixels = layered;
+    layered_img
+}
 
-                    for row in &mut heights {
-                        for height in row {
-                            *height *= 8.0;
+fn load_texture(data_files: &Option<PathBuf>, ltex: &LandscapeTexture) -> Option<ColorImage> {
+    // data files
+    let data_files = data_files.as_ref()?;
 
-                            let z = *height;
-                            if let Some(minz) = min_z {
-                                if z < minz {
-                                    min_z = Some(z);
-                                }
-                            } else {
-                                min_z = Some(z);
-                            }
-                            if let Some(maxz) = max_z {
-                                if z > maxz {
-                                    max_z = Some(z);
-                                }
-                            } else {
-                                max_z = Some(z);
-                            }
-                        }
-                    }
+    let texture = ltex.file_name.clone();
+    let tex_path = data_files.join("Textures").join(texture);
+    if !tex_path.exists() {
+        return None;
+    }
 
-                    heights_map.insert((cx, cy), heights);
-                }
+    // decode image
+    if let Ok(mut reader) = image::io::Reader::open(&tex_path) {
+        let ext = tex_path.extension().unwrap().to_string_lossy();
+        if ext.contains("tga") {
+            reader.set_format(image::ImageFormat::Tga);
+        } else if ext.contains("dds") {
+            reader.set_format(image::ImageFormat::Dds);
+        } else {
+            // not supported
+            return None;
+        }
+
+        let Ok(image) = reader.decode() else {
+            return None;
+        };
+
+        let size = [image.width() as _, image.height() as _];
+        let image_buffer = image.to_rgba8();
+        let pixels = image_buffer.as_flat_samples();
+        return Some(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()));
+    }
+
+    None
+}
+
+pub fn get_cell_name(cells: &HashMap<CellKey, Cell>, pos: CellKey) -> String {
+    let mut name = "".to_owned();
+    if let Some(cell) = cells.get(&pos) {
+        name.clone_from(&cell.name);
+        if name.is_empty() {
+            if let Some(region) = cell.region.clone() {
+                name = region;
             }
         }
     }
+    format!("{} ({},{})", name, pos.0, pos.1)
+}
 
-    let min_z = min_z?;
-    let max_z = max_z?;
-    let dimensions_z = DimensionsZ { min_z, max_z };
+//////////////////////////////////////////
+// TES3
 
-    let heights = height_map_to_pixel_heights(dimensions, dimensions_z, heights_map);
-
-    Some((heights, dimensions_z))
+/// creates a unique id from a record
+/// we take the record tag + the record id
+pub fn get_unique_id(record: &TES3Object) -> String {
+    format!("{},{}", record.tag_str(), record.editor_id())
 }
