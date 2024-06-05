@@ -3,14 +3,15 @@ use std::collections::HashMap;
 use egui::{Color32, ColorImage};
 use tes3::esp::Landscape;
 
-use crate::{CellKey, Dimensions, GRID_SIZE};
+use crate::{CellKey, Dimensions};
 
 pub fn generate_map(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
 ) -> ColorImage {
-    let height = dimensions.height();
-    let width = dimensions.width();
+    let grid = 9;
+    let height = dimensions.height() * grid;
+    let width = dimensions.width() * grid;
 
     // calculate map size
     let map_len = height * width;
@@ -19,15 +20,15 @@ pub fn generate_map(
     for grid_y in 0..height {
         for grid_x in (0..width).rev() {
             // we can divide by grid to get the cell and subtract the bounds to get the cell coordinates
-            let x = (grid_x / GRID_SIZE) as i32 + dimensions.min_x;
-            let y = (grid_y / GRID_SIZE) as i32 + dimensions.min_y;
+            let x = (grid_x / grid) as i32 + dimensions.min_x;
+            let y = (grid_y / grid) as i32 + dimensions.min_y;
 
             // get LAND record
             let key = (x, y);
             if let Some(land) = landscape_records.get(&key) {
                 // get remainder
-                let hx = grid_x % GRID_SIZE;
-                let hy = grid_y % GRID_SIZE;
+                let hx = grid_x % grid;
+                let hy = grid_y % grid;
 
                 let heightmap = land.world_map_data.data.clone().to_vec();
                 map.push(get_map_color(heightmap[hy][hx] as f32));

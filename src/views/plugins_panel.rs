@@ -23,7 +23,7 @@ impl TemplateApp {
         // data files path and open button
         ui.horizontal(|ui| {
             if let Some(data_files) = &self.data_files {
-                ui.label(format!("Data files: {}", data_files.display()));
+                ui.label(format!("{}", data_files.display()));
             } else {
                 ui.label("No data files loaded");
             }

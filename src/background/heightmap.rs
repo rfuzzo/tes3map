@@ -1,8 +1,37 @@
 use std::collections::HashMap;
 
+use eframe::epaint::{Color32, ColorImage};
 use tes3::esp::{Landscape, LandscapeFlags};
 
-use crate::{CellKey, Dimensions, DimensionsZ, VERTEX_CNT};
+use crate::{
+    CellKey, depth_to_color, Dimensions, DimensionsZ, height_to_color, SavedUiData, VERTEX_CNT,
+};
+
+fn get_color_for_height(value: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> Color32 {
+    if value < dimensions.min_z {
+        return Color32::TRANSPARENT;
+    }
+
+    if value < 0.0 {
+        depth_to_color(value, dimensions, ui_data)
+    } else {
+        height_to_color(value, dimensions, ui_data)
+    }
+}
+pub fn generate_heightmap(
+    pixels: &[f32],
+    size: [usize; 2],
+    dimensions_z: DimensionsZ,
+    ui_data: SavedUiData,
+) -> ColorImage {
+    let mut img = ColorImage::new(size, Color32::WHITE);
+    let p = pixels
+        .iter()
+        .map(|f| get_color_for_height(*f, dimensions_z, ui_data))
+        .collect::<Vec<_>>();
+    img.pixels = p;
+    img
+}
 
 pub fn calculate_heights(
     landscape_records: &HashMap<CellKey, Landscape>,

@@ -62,15 +62,15 @@ impl Dimensions {
         (x - self.min_x).max(0) as usize
     }
 
+    pub fn tranform_to_canvas_y(&self, y: i32) -> usize {
+        (self.max_y - y).max(0) as usize
+    }
+
     pub fn tranform_to_canvas(&self, cell_key: CellKey) -> Pos2 {
         Pos2::new(
             self.tranform_to_canvas_x(cell_key.0) as f32,
             self.tranform_to_canvas_y(cell_key.1) as f32,
         )
-    }
-
-    pub fn tranform_to_canvas_y(&self, y: i32) -> usize {
-        (self.max_y - y).max(0) as usize
     }
 
     pub fn stride(&self, pixel_per_cell: usize) -> usize {

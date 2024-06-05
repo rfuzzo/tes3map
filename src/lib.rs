@@ -37,8 +37,8 @@ type CellKey = (i32, i32);
 pub enum EBackground {
     None,
     Landscape,
-    #[default]
     HeightMap,
+    #[default]
     GameMap,
 }
 
@@ -196,18 +196,6 @@ where
     plugins
 }
 
-fn get_color_for_height(value: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> Color32 {
-    if value < dimensions.min_z {
-        return Color32::TRANSPARENT;
-    }
-
-    if value < 0.0 {
-        depth_to_color(value, dimensions, ui_data)
-    } else {
-        height_to_color(value, dimensions, ui_data)
-    }
-}
-
 fn height_to_color(height: f32, dimensions: DimensionsZ, ui_data: SavedUiData) -> Color32 {
     let b: LinSrgb<u8> = LinSrgb::from_components((
         ui_data.height_base.r(),
@@ -280,21 +268,6 @@ fn overlay_colors_with_alpha(color1: Color32, color2: Color32, alpha1: f32) -> C
     let b = (alpha1 * color1.b() as f32 + alpha2 * color2.b() as f32) as u8;
 
     Color32::from_rgba_premultiplied(r, g, b, 255)
-}
-
-fn create_image(
-    pixels: &[f32],
-    size: [usize; 2],
-    dimensions_z: DimensionsZ,
-    ui_data: SavedUiData,
-) -> ColorImage {
-    let mut img = ColorImage::new(size, Color32::WHITE);
-    let p = pixels
-        .iter()
-        .map(|f| get_color_for_height(*f, dimensions_z, ui_data))
-        .collect::<Vec<_>>();
-    img.pixels = p;
-    img
 }
 
 fn overlay_colors(color1: Color32, color2: Color32) -> Color32 {
