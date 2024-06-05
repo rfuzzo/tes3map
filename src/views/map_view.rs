@@ -3,6 +3,7 @@ use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
 
 use crate::{CellKey, EBackground, height_from_screen_space, save_image, TemplateApp, VERTEX_CNT};
+use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::grid::get_grid_shapes;
 use crate::overlay::regions::get_region_shapes;
@@ -101,11 +102,11 @@ impl TemplateApp {
             painter.image(texture.into(), canvas, uv, Color32::WHITE);
         }
 
-        // TODO Overlays
+        // Overlays
         if self.ui_data.overlay_paths {
             // let texture =
             //     get_color_pixels(&self.dimensions, &self.land_records, self.ui_data.alpha);
-            // TODO texture handles
+            // TODO overlay paths
             // painter.image(texture, canvas, uv, Color32::WHITE);
         }
         if self.ui_data.overlay_region {
@@ -129,6 +130,10 @@ impl TemplateApp {
             let shapes = get_travel_shapes(to_screen, &self.dimensions, &self.travel_edges);
             painter.extend(shapes);
         }
+        if self.ui_data.overlay_conflicts {
+            // TODO overlay conflicts
+        }
+
         // overlay selected cell
         if let Some(key) = self.selected_id {
             let rect = self.get_rect_at_cell(to_screen, key);
@@ -145,18 +150,36 @@ impl TemplateApp {
             self.hover_pos = key;
 
             let transformed_position = from_screen * pointer_pos;
-            if let Some(value) = height_from_screen_space(
+            if let Some(height) = height_from_screen_space(
                 &self.heights,
                 &self.dimensions,
                 transformed_position.x as usize / VERTEX_CNT,
                 transformed_position.y as usize / VERTEX_CNT,
             ) {
-                self.info = format!("({:?}), height: {}", key, value);
+                let mut tooltipinfo = TooltipInfo {
+                    key,
+                    height,
+                    region: String::new(),
+                    cell_name: String::new(),
+                };
+
+                // get cell
+                if let Some(cell) = self.cell_records.get(&key) {
+                    tooltipinfo.cell_name.clone_from(&cell.name);
+                    if let Some(region) = cell.region.as_ref() {
+                        tooltipinfo.region.clone_from(region);
+                    }
+                }
+
+                self.info = tooltipinfo;
             }
 
             if self.ui_data.show_tooltips {
                 egui::show_tooltip(ui.ctx(), egui::Id::new("hover_tooltip"), |ui| {
-                    ui.label(self.info.clone());
+                    let info = self.info.clone();
+                    ui.label(format!("{:?} - {}", info.key, info.cell_name));
+                    ui.label(format!("Height: {}", info.height));
+                    ui.label(format!("Region: {}", info.region));
                 });
             }
         }
@@ -227,15 +250,37 @@ impl TemplateApp {
             ui.separator();
 
             if ui.button("Save as image").clicked() {
+                // construct default name from the first plugin name then the background type abbreviated
+                let background_name = match self.ui_data.background {
+                    EBackground::None => "",
+                    EBackground::Landscape => "l",
+                    EBackground::HeightMap => "h",
+                    EBackground::GameMap => "g",
+                };
+                let first_plugin = self
+                    .plugins
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .filter(|p| p.enabled)
+                    .nth(0)
+                    .unwrap();
+                let plugin_name = first_plugin.get_name();
+                let defaultname = format!("{}_{}.png", plugin_name, background_name);
+
                 let file_option = rfd::FileDialog::new()
                     .add_filter("png", &["png"])
+                    .set_file_name(defaultname)
                     .save_file();
 
                 if let Some(original_path) = file_option {
                     let mut image = None;
                     match self.ui_data.background {
                         EBackground::None => {}
-                        EBackground::Landscape => {}
+                        EBackground::Landscape => {
+                            let max_texture_side = ctx.input(|i| i.max_texture_side);
+                            image = Some(self.get_landscape_image(max_texture_side));
+                        }
                         EBackground::HeightMap => {
                             image = Some(self.get_heightmap_image());
                         }
@@ -247,26 +292,22 @@ impl TemplateApp {
                     if let Some(image) = image {
                         if let Err(e) = save_image(&original_path, &image) {
                             println!("{}", e)
+                        } else {
+                            // message
+                            let msg = format!("Image saved to: {}", original_path.display());
+                            rfd::MessageDialog::new()
+                                .set_title("Info")
+                                .set_description(msg)
+                                .set_buttons(rfd::MessageButtons::Ok)
+                                .show();
                         }
                     }
 
-                    // if self.ui_data.overlay_paths {
-                    //     todo!()
-                    // } else if self.ui_data.overlay_region {
-                    //     todo!()
-                    // } else if self.ui_data.overlay_grid {
-                    //     todo!()
-                    // } else if self.ui_data.overlay_cities {
-                    //     todo!()
-                    // } else if self.ui_data.overlay_travel {
-                    //     todo!()
-                    // } else {
-                    //     todo!()
-                    // }
+                    // TODO save overlays
+
+                    ui.close_menu();
                 }
             }
-
-            ui.close_menu();
         });
     }
 }

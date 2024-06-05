@@ -17,6 +17,14 @@ pub enum ESidePanelView {
     Cells,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TooltipInfo {
+    pub key: CellKey,
+    pub height: f32,
+    pub region: String,
+    pub cell_name: String,
+}
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct TemplateApp {
@@ -62,7 +70,7 @@ pub struct TemplateApp {
     #[serde(skip)]
     pub side_panel_view: ESidePanelView,
     #[serde(skip)]
-    pub info: String,
+    pub info: TooltipInfo,
     #[serde(skip)]
     pub current_landscape: Option<Landscape>,
     #[serde(skip)]
@@ -109,13 +117,13 @@ impl TemplateApp {
         {
             self.dimensions_z = dimensions_z;
             self.heights = heights;
-            let max_texture_side = ctx.input(|i| i.max_texture_side);
 
             match self.ui_data.background {
                 EBackground::None => {
                     // do nothing
                 }
                 EBackground::Landscape => {
+                    let max_texture_side = ctx.input(|i| i.max_texture_side);
                     let image = self.get_landscape_image(max_texture_side);
                     let _: &egui::TextureHandle = self.bg.get_or_insert_with(|| {
                         ctx.load_texture("background", image, Default::default())

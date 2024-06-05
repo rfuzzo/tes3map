@@ -83,7 +83,7 @@ impl TemplateApp {
         let mut land_records: HashMap<CellKey, Landscape> = HashMap::default();
 
         let mut cells: HashMap<CellKey, Cell> = HashMap::default();
-        let mut land_id_map: HashMap<String, CellKey> = HashMap::default();
+        //let mut land_id_map: HashMap<String, CellKey> = HashMap::default();
         let mut cell_conflicts: HashMap<CellKey, Vec<u64>> = HashMap::default();
         let mut travels: HashMap<String, (Vec<CellKey>, String)> = HashMap::default();
         let mut npcs: HashMap<String, CellKey> = HashMap::default();
@@ -169,7 +169,7 @@ impl TemplateApp {
 
                     // add landscape
                     land_records.insert(key, land.clone());
-                    land_id_map.insert(get_unique_id(&TES3Object::Landscape(land.clone())), key);
+                    //land_id_map.insert(get_unique_id(&TES3Object::Landscape(land.clone())), key);
                 }
 
                 // add landscape textures
@@ -214,11 +214,8 @@ impl TemplateApp {
         }
 
         self.land_records = land_records;
-
-        // TODO
         self.cell_records = cells;
         // self.land_ids = land_id_map;
 
-        //
     }
 }

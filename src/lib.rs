@@ -63,6 +63,7 @@ pub struct SavedUiData {
     pub overlay_grid: bool,
     pub overlay_cities: bool,
     pub overlay_travel: bool,
+    pub overlay_conflicts: bool,
 
     pub show_tooltips: bool,
     pub texture_size: usize,
@@ -87,6 +88,7 @@ impl Default for SavedUiData {
             overlay_grid: false,
             overlay_cities: false,
             overlay_travel: false,
+            overlay_conflicts: false,
 
             show_tooltips: false,
 
@@ -280,18 +282,6 @@ fn overlay_colors(color1: Color32, color2: Color32) -> Color32 {
     let a = alpha1 * 255.0; // TODO HACK
 
     Color32::from_rgba_premultiplied(r, g, b, a as u8)
-}
-
-fn append_to_filename(path: &Path, suffix: &str) -> PathBuf {
-    // Get the stem (filename without extension) and extension from the original path
-    let stem = path.file_stem().unwrap().to_str().unwrap();
-    let extension = path.extension().map_or("", |ext| ext.to_str().unwrap());
-
-    // Append a number to the stem (filename)
-    let new_stem = format!("{}_{}", stem, suffix);
-
-    // Create a new PathBuf with the modified stem and the same extension
-    PathBuf::from(path.parent().unwrap()).join(format!("{}.{}", new_stem, extension))
 }
 
 fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), ImageError> {

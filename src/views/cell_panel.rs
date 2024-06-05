@@ -9,7 +9,7 @@ impl TemplateApp {
 
         ui.separator();
 
-        // TODO search bar
+        // search bar
         ui.horizontal(|ui| {
             ui.label("Filter: ");
             ui.text_edit_singleline(&mut self.cell_filter);
@@ -23,10 +23,11 @@ impl TemplateApp {
                 ids.sort();
 
                 for key in ids {
-                    // TODO upper and lowercase search
-                    let key_str = format!("{:?}", key);
+                    // upper and lowercase search
+                    let cell_name = self.cell_records.get(key).unwrap().name.clone();
+                    let label_text = format!("{:?} - {}", key, cell_name);
                     if !self.cell_filter.is_empty()
-                        && !key_str
+                        && !label_text
                             .to_lowercase()
                             .contains(&self.cell_filter.to_lowercase())
                     {
@@ -41,7 +42,8 @@ impl TemplateApp {
                         }
                     }
 
-                    let response = ui.add(egui::Label::new(key_str).sense(egui::Sense::click()));
+                    let label = egui::Label::new(label_text).sense(egui::Sense::click());
+                    let response = ui.add(label);
                     if response.clicked() {
                         self.selected_id = Some(*key);
                     }
