@@ -13,11 +13,14 @@ impl TemplateApp {
         ui.horizontal(|ui| {
             ui.label("Filter: ");
             ui.text_edit_singleline(&mut self.cell_filter);
+            // clear filter button
+            if ui.button("x").clicked() {
+                self.plugin_filter.clear();
+            }
         });
-        ui.separator();
 
         egui::ScrollArea::vertical()
-            .auto_shrink([false; 2])
+            .auto_shrink([false, true])
             .show(ui, |ui| {
                 let mut ids = self.cell_records.keys().collect::<Vec<_>>();
                 ids.sort();

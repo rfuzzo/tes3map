@@ -77,6 +77,8 @@ pub struct TemplateApp {
     pub selected_id: Option<CellKey>,
     #[serde(skip)]
     pub cell_filter: String,
+    #[serde(skip)]
+    pub plugin_filter: String,
 }
 
 impl TemplateApp {

@@ -9,15 +9,9 @@ impl TemplateApp {
     pub fn plugins_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Plugins");
 
+        // load plugins
         if self.plugins.is_none() && self.data_files.is_some() {
-            // populate plugins here
-            let path = self.data_files.as_ref().unwrap();
-            let plugins = get_plugins_sorted(&path, false);
-            let vms = plugins
-                .iter()
-                .map(|p| PluginViewModel::from_path(p.clone()))
-                .collect();
-            self.plugins = Some(vms);
+            self.refresh_plugins();
         }
 
         // data files path and open button
@@ -43,26 +37,87 @@ impl TemplateApp {
             }
         });
 
-        if self.data_files.is_some() && ui.button("Load").clicked() {
-            self.load_plugin_data();
-            self.reload_background(ctx, None);
+        if self.data_files.is_none() {
+            return;
         }
 
+        // buttons
+        ui.horizontal(|ui| {
+            ui.visuals_mut().override_text_color = Some(egui::Color32::DARK_GREEN);
+            if ui.button("Load").clicked() {
+                self.load_plugin_data();
+                self.reload_background(ctx, None);
+            }
+            ui.visuals_mut().override_text_color = None;
+
+            if ui.button("Refresh").clicked() {
+                self.refresh_plugins();
+            }
+
+            if ui.button("Select all").clicked() {
+                if let Some(plugins) = &mut self.plugins {
+                    for vm in plugins.iter_mut() {
+                        vm.enabled = true;
+                    }
+                }
+            }
+            // deselect all
+            if ui.button("Select none").clicked() {
+                if let Some(plugins) = &mut self.plugins {
+                    for vm in plugins.iter_mut() {
+                        vm.enabled = false;
+                    }
+                }
+            }
+        });
+
         ui.separator();
+
+        // search bar
+        ui.horizontal(|ui| {
+            ui.label("Filter: ");
+            ui.text_edit_singleline(&mut self.plugin_filter);
+            // clear filter button
+            if ui.button("x").clicked() {
+                self.plugin_filter.clear();
+            }
+        });
 
         // plugins list
         if let Some(plugins) = &mut self.plugins {
             egui::ScrollArea::vertical()
-                .auto_shrink([false; 2])
+                .auto_shrink([false, true])
                 .show(ui, |ui| {
                     // show plugins
                     for vm in plugins.iter_mut() {
-                        // checkbox with filename
+                        // upper and lowercase search
                         let name = vm.get_name();
+
+                        if !self.plugin_filter.is_empty()
+                            && !name
+                                .to_lowercase()
+                                .contains(&self.plugin_filter.to_lowercase())
+                        {
+                            continue;
+                        }
+
+                        // checkbox with filename
+
                         ui.checkbox(&mut vm.enabled, name);
                     }
                 });
         }
+    }
+
+    fn refresh_plugins(&mut self) {
+        // populate plugins here
+        let path = self.data_files.as_ref().unwrap();
+        let plugins = get_plugins_sorted(&path, false);
+        let vms = plugins
+            .iter()
+            .map(|p| PluginViewModel::from_path(p.clone()))
+            .collect();
+        self.plugins = Some(vms);
     }
 
     fn load_plugin_data(&mut self) {
@@ -216,6 +271,5 @@ impl TemplateApp {
         self.land_records = land_records;
         self.cell_records = cells;
         // self.land_ids = land_id_map;
-
     }
 }
