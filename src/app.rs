@@ -63,7 +63,9 @@ pub struct TemplateApp {
     pub cell_conflicts: HashMap<CellKey, Vec<u64>>,
     // textures in memory
     #[serde(skip)]
-    pub bg: Option<egui::TextureHandle>,
+    pub background_handle: Option<egui::TextureHandle>,
+    #[serde(skip)]
+    pub paths_handle: Option<egui::TextureHandle>,
 
     // app
     #[serde(skip)]
@@ -97,9 +99,22 @@ impl TemplateApp {
         Default::default()
     }
 
+    pub fn reload_paths(&mut self, ctx: &egui::Context, reload: bool) {
+        if reload { 
+            self.paths_handle = None;
+        }
+        
+        if self.paths_handle.is_none() {
+            let image = self.get_overlay_path_image();
+            let _: &egui::TextureHandle = self
+                .paths_handle
+                .get_or_insert_with(|| ctx.load_texture("paths", image, Default::default()));
+        }
+    }
+
     /// Assigns landscape_records, dimensions and pixels
     pub fn reload_background(&mut self, ctx: &egui::Context, new_dimensions: Option<Dimensions>) {
-        self.bg = None;
+        self.background_handle = None;
 
         // calculate dimensions
         if let Some(dimensions) = new_dimensions {
@@ -128,19 +143,19 @@ impl TemplateApp {
                 EBackground::Landscape => {
                     let max_texture_side = ctx.input(|i| i.max_texture_side);
                     let image = self.get_landscape_image(max_texture_side);
-                    let _: &egui::TextureHandle = self.bg.get_or_insert_with(|| {
+                    let _: &egui::TextureHandle = self.background_handle.get_or_insert_with(|| {
                         ctx.load_texture("background", image, Default::default())
                     });
                 }
                 EBackground::HeightMap => {
                     let image = self.get_heightmap_image();
-                    let _: &egui::TextureHandle = self.bg.get_or_insert_with(|| {
+                    let _: &egui::TextureHandle = self.background_handle.get_or_insert_with(|| {
                         ctx.load_texture("background", image, Default::default())
                     });
                 }
                 EBackground::GameMap => {
                     let image = self.get_gamemap_image();
-                    let _: &egui::TextureHandle = self.bg.get_or_insert_with(|| {
+                    let _: &egui::TextureHandle = self.background_handle.get_or_insert_with(|| {
                         ctx.load_texture("background", image, Default::default())
                     });
                 }

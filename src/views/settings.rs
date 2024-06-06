@@ -1,15 +1,24 @@
-use egui::reset_button;
+use egui::Button;
 
-use crate::{EBackground, TemplateApp};
+use crate::{EBackground, SavedUiData, TemplateApp};
 
 impl TemplateApp {
     /// Settings popup menu
     pub(crate) fn settings_ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.horizontal(|ui| {
-            reset_button(ui, &mut self.ui_data);
+            // if reset then also refresh
+            if ui
+                .add_enabled(self.ui_data != SavedUiData::default(), Button::new("Reset"))
+                .clicked()
+            {
+                self.ui_data = SavedUiData::default();
+                self.reload_background(ctx, None);
+                self.reload_paths(ctx, true);
+            }
 
             if ui.button("Refresh image").clicked() {
                 self.reload_background(ctx, None);
+                self.reload_paths(ctx, true);
             }
         });
 
@@ -60,7 +69,12 @@ impl TemplateApp {
         ui.separator();
 
         ui.label("Overlays");
-        ui.checkbox(&mut self.ui_data.overlay_paths, "Show paths");
+        if ui
+            .checkbox(&mut self.ui_data.overlay_paths, "Show paths")
+            .clicked()
+        {
+            self.reload_paths(ctx, false);
+        }
         ui.checkbox(&mut self.ui_data.overlay_region, "Show regions");
         ui.checkbox(&mut self.ui_data.overlay_grid, "Show cell grid");
         ui.checkbox(&mut self.ui_data.overlay_cities, "Show cities");

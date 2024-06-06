@@ -103,16 +103,16 @@ impl TemplateApp {
         // let uv = Rect::from_min_max(pos2(0.0, 0.0), Pos2::new(rx, ry));
 
         // Background
-        if let Some(texture) = &self.bg {
-            painter.image(texture.into(), canvas, uv, Color32::WHITE);
+        if let Some(handle) = &self.background_handle {
+            painter.image(handle.into(), canvas, uv, Color32::WHITE);
         }
 
         // Overlays
         if self.ui_data.overlay_paths {
-            // let texture =
-            //     get_color_pixels(&self.dimensions, &self.land_records, self.ui_data.alpha);
-            // TODO overlay paths
-            // painter.image(texture, canvas, uv, Color32::WHITE);
+            if let Some(handle) = &self.paths_handle {
+                // TODO overlay paths
+                painter.image(handle.into(), canvas, uv, Color32::WHITE);
+            }
         }
         if self.ui_data.overlay_region {
             let shapes = get_region_shapes(

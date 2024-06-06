@@ -67,6 +67,7 @@ impl TemplateApp {
             if ui.button("Load").clicked() {
                 self.load_plugin_data();
                 self.reload_background(ctx, None);
+                self.reload_paths(ctx, true);
             }
             ui.visuals_mut().override_text_color = None;
         });
