@@ -43,13 +43,6 @@ impl TemplateApp {
 
         // buttons
         ui.horizontal(|ui| {
-            ui.visuals_mut().override_text_color = Some(egui::Color32::DARK_GREEN);
-            if ui.button("Load").clicked() {
-                self.load_plugin_data();
-                self.reload_background(ctx, None);
-            }
-            ui.visuals_mut().override_text_color = None;
-
             if ui.button("Refresh").clicked() {
                 self.refresh_plugins();
             }
@@ -69,6 +62,13 @@ impl TemplateApp {
                     }
                 }
             }
+
+            ui.visuals_mut().override_text_color = Some(egui::Color32::DARK_GREEN);
+            if ui.button("Load").clicked() {
+                self.load_plugin_data();
+                self.reload_background(ctx, None);
+            }
+            ui.visuals_mut().override_text_color = None;
         });
 
         ui.separator();
@@ -132,6 +132,7 @@ impl TemplateApp {
         self.ltex_records.clear();
         self.regn_records.clear();
         self.travel_edges.clear();
+        self.cell_records.clear();
         self.cell_conflicts.clear();
 
         // load plugins into memory

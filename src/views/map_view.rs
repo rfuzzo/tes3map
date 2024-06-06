@@ -5,6 +5,7 @@ use egui::Sense;
 use crate::{CellKey, EBackground, height_from_screen_space, save_image, TemplateApp, VERTEX_CNT};
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
+use crate::overlay::conflicts::get_conflict_shapes;
 use crate::overlay::grid::get_grid_shapes;
 use crate::overlay::regions::get_region_shapes;
 use crate::overlay::travel::get_travel_shapes;
@@ -135,7 +136,8 @@ impl TemplateApp {
             painter.extend(shapes);
         }
         if self.ui_data.overlay_conflicts {
-            // TODO overlay conflicts
+            let shapes = get_conflict_shapes(to_screen, &self.dimensions, &self.cell_conflicts);
+            painter.extend(shapes);
         }
 
         // overlay selected cell
@@ -153,37 +155,73 @@ impl TemplateApp {
             let key = self.cellkey_from_screen(from_screen, pointer_pos);
             self.hover_pos = key;
 
-            let transformed_position = from_screen * pointer_pos;
-            if let Some(height) = height_from_screen_space(
-                &self.heights,
-                &self.dimensions,
-                transformed_position.x as usize / VERTEX_CNT,
-                transformed_position.y as usize / VERTEX_CNT,
-            ) {
-                let mut tooltipinfo = TooltipInfo {
-                    key,
-                    height,
-                    region: String::new(),
-                    cell_name: String::new(),
-                };
+            let mut tooltipinfo = TooltipInfo {
+                key,
+                height: 0.0,
+                region: String::new(),
+                cell_name: String::new(),
+                conflicts: Vec::new(),
+            };
 
-                // get cell
-                if let Some(cell) = self.cell_records.get(&key) {
-                    tooltipinfo.cell_name.clone_from(&cell.name);
-                    if let Some(region) = cell.region.as_ref() {
-                        tooltipinfo.region.clone_from(region);
-                    }
+            // get cell
+            if let Some(cell) = self.cell_records.get(&key) {
+                tooltipinfo.cell_name.clone_from(&cell.name);
+                if let Some(region) = cell.region.as_ref() {
+                    tooltipinfo.region.clone_from(region);
                 }
-
-                self.info = tooltipinfo;
             }
+
+            // get height
+            if self.ui_data.background == EBackground::HeightMap {
+                let transformed_position = from_screen * pointer_pos;
+                if let Some(height) = height_from_screen_space(
+                    &self.heights,
+                    &self.dimensions,
+                    transformed_position.x as usize / VERTEX_CNT,
+                    transformed_position.y as usize / VERTEX_CNT,
+                ) {
+                    tooltipinfo.height = height;
+                }
+            }
+
+            // get conflicts
+            if self.ui_data.show_tooltips {
+                if let Some(conflicts) = self.cell_conflicts.get(&key) {
+                    tooltipinfo.conflicts.clone_from(conflicts);
+                }
+            }
+
+            self.info = tooltipinfo;
 
             if self.ui_data.show_tooltips {
                 egui::show_tooltip(ui.ctx(), egui::Id::new("hover_tooltip"), |ui| {
                     let info = self.info.clone();
                     ui.label(format!("{:?} - {}", info.key, info.cell_name));
-                    ui.label(format!("Height: {}", info.height));
                     ui.label(format!("Region: {}", info.region));
+
+                    // only show if current background is heightmap
+                    if self.ui_data.background == EBackground::HeightMap {
+                        ui.label("________");
+                        ui.label(format!("Height: {}", info.height));
+                    }
+
+                    // show conflicts
+                    if !info.conflicts.is_empty() {
+                        ui.label("________");
+                        ui.label("Conflicts:");
+                        for conflict in info.conflicts {
+                            // lookup plugin name by conflict id
+                            if let Some(plugin) = self
+                                .plugins
+                                .as_ref()
+                                .unwrap()
+                                .iter()
+                                .find(|p| p.hash == conflict)
+                            {
+                                ui.label(format!("  - {}", plugin.get_name()));
+                            }
+                        }
+                    }
                 });
             }
         }

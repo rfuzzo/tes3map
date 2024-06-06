@@ -65,6 +65,7 @@ impl TemplateApp {
         ui.checkbox(&mut self.ui_data.overlay_grid, "Show cell grid");
         ui.checkbox(&mut self.ui_data.overlay_cities, "Show cities");
         ui.checkbox(&mut self.ui_data.overlay_travel, "Show travel");
+        ui.checkbox(&mut self.ui_data.overlay_conflicts, "Show conflicts");
 
         ui.separator();
         ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");

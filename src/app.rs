@@ -23,6 +23,7 @@ pub struct TooltipInfo {
     pub height: f32,
     pub region: String,
     pub cell_name: String,
+    pub conflicts: Vec<u64>,
 }
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
