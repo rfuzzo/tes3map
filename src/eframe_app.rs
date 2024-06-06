@@ -3,6 +3,9 @@ use std::env;
 use crate::*;
 use crate::app::ESidePanelView;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const NAME: &str = env!("CARGO_PKG_NAME");
+
 impl eframe::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -71,6 +74,10 @@ impl eframe::App for TemplateApp {
                 ));
                 ui.separator();
                 ui.label(get_cell_name(&self.cell_records, self.hover_pos));
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(format!("{} {}", NAME, VERSION));
+                });
             });
         });
 
