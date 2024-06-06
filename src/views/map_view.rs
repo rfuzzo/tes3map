@@ -79,19 +79,23 @@ impl TemplateApp {
 
         // TODO cut off pan at (0,0)
         // zoomed and panned canvas
-        let min = self.zoom_data.drag_offset;
-        let max = response.rect.max * self.zoom_data.zoom + self.zoom_data.drag_offset.to_vec2();
-        let canvas = Rect::from_min_max(min, max);
 
         // transforms
         let pixel_width = self.dimensions.width() as f32 * self.dimensions.cell_size() as f32;
         let pixel_height = self.dimensions.height() as f32 * self.dimensions.cell_size() as f32;
-        let to = canvas;
+
         let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
-        let to_screen = RectTransform::from_to(from, to);
+
+        let min = self.zoom_data.drag_offset;
+        let max = Pos2::new(response.rect.max.x, response.rect.max.x) * self.zoom_data.zoom
+            + self.zoom_data.drag_offset.to_vec2();
+        let canvas = Rect::from_min_max(min, max);
+
+        let to_screen = RectTransform::from_to(from, canvas);
         let from_screen = to_screen.inverse();
 
         // paint maps
+
         let uv = Rect::from_min_max(pos2(0.0, 0.0), Pos2::new(1.0, 1.0));
         // let rx = (response.rect.max.x - response.rect.min.x) / pixel_width;
         // let ry = (response.rect.max.y - response.rect.min.y) / pixel_height;
