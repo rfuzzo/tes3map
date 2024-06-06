@@ -2,13 +2,13 @@ use eframe::emath::{pos2, Pos2, Rect, RectTransform};
 use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
 
-use crate::{CellKey, EBackground, height_from_screen_space, save_image, TemplateApp, VERTEX_CNT};
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::conflicts::get_conflict_shapes;
 use crate::overlay::grid::get_grid_shapes;
 use crate::overlay::regions::get_region_shapes;
 use crate::overlay::travel::get_travel_shapes;
+use crate::{height_from_screen_space, save_image, CellKey, EBackground, TemplateApp, VERTEX_CNT};
 
 impl TemplateApp {
     fn cellkey_from_screen(&mut self, from_screen: RectTransform, pointer_pos: Pos2) -> CellKey {
@@ -35,8 +35,8 @@ impl TemplateApp {
             self.dimensions.max_y,
             self.dimensions.min_x,
             self.dimensions.max_x,
-            self.dimensions_z.min_z,
-            self.dimensions_z.max_z
+            self.dimensions.min_z,
+            self.dimensions.max_z
         ));
 
         ui.separator();

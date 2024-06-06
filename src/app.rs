@@ -38,8 +38,6 @@ pub struct TemplateApp {
     #[serde(skip)]
     pub dimensions: Dimensions,
     #[serde(skip)]
-    pub dimensions_z: DimensionsZ,
-    #[serde(skip)]
     pub heights: Vec<f32>,
 
     // tes3
@@ -100,10 +98,10 @@ impl TemplateApp {
     }
 
     pub fn reload_paths(&mut self, ctx: &egui::Context, reload: bool) {
-        if reload { 
+        if reload {
             self.paths_handle = None;
         }
-        
+
         if self.paths_handle.is_none() {
             let image = self.get_overlay_path_image();
             let _: &egui::TextureHandle = self
@@ -130,10 +128,7 @@ impl TemplateApp {
         }
 
         // calculate heights
-        if let Some((heights, dimensions_z)) =
-            background::heightmap::calculate_heights(&self.land_records, &self.dimensions)
-        {
-            self.dimensions_z = dimensions_z;
+        if let Some(heights) = calculate_heights(&self.land_records, &mut self.dimensions) {
             self.heights = heights;
 
             match self.ui_data.background {
@@ -166,13 +161,9 @@ impl TemplateApp {
     // Shortcuts
 
     pub fn get_heightmap_image(&mut self) -> ColorImage {
-        generate_heightmap(
-            &self.heights,
-            self.dimensions.pixel_size_tuple(VERTEX_CNT),
-            self.dimensions_z,
-            self.ui_data,
-        )
+        generate_heightmap(&self.heights, &self.dimensions, self.ui_data)
     }
+
     pub fn get_gamemap_image(&mut self) -> ColorImage {
         generate_map(&self.dimensions, &self.land_records)
     }
