@@ -92,10 +92,6 @@ impl TemplateApp {
         Default::default()
     }
 
-    pub fn cell_size(&self) -> usize {
-        self.ui_data.landscape_settings.texture_size * GRID_SIZE
-    }
-
     pub fn reload_paths(&mut self, ctx: &egui::Context) {
         let image = get_overlay_path_image(&self.dimensions, &self.land_records);
         self.paths_handle = Some(ctx.load_texture("paths", image, Default::default()));
@@ -112,8 +108,9 @@ impl TemplateApp {
         }
 
         // otherwise check if possible
-        let width = self.dimensions.pixel_width(self.cell_size());
-        let height = self.dimensions.pixel_height(self.cell_size());
+        let cell_size = self.ui_data.landscape_settings.cell_size();
+        let width = self.dimensions.pixel_width(cell_size);
+        let height = self.dimensions.pixel_height(cell_size);
         if width > max_texture_side || height > max_texture_side {
             error!(
                 "Texture size too large: (width: {}, height: {}), supported side: {}, max_texture_side: {}",
@@ -274,7 +271,6 @@ impl TemplateApp {
         compute_landscape_image(
             &self.ui_data.landscape_settings,
             &self.dimensions,
-            self.cell_size(),
             &self.land_records,
             &self.ltex_records,
             &self.heights,

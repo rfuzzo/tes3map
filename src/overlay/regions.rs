@@ -8,7 +8,6 @@ use crate::{dimensions::Dimensions, CellKey};
 pub fn get_region_shapes(
     to_screen: RectTransform,
     dimensions: &Dimensions,
-    cell_size: usize,
     regn_records: &HashMap<String, Region>,
     cell_records: &HashMap<CellKey, Cell>,
 ) -> Vec<Shape> {
@@ -29,12 +28,12 @@ pub fn get_region_shapes(
                             region.map_color[2],
                         );
 
-                        let p00x = cell_size * dimensions.tranform_to_canvas_x(cx);
-                        let p00y = cell_size * dimensions.tranform_to_canvas_y(cy);
+                        let p00x = dimensions.tranform_to_canvas_x(cx);
+                        let p00y = dimensions.tranform_to_canvas_y(cy);
                         let p00 = Pos2::new(p00x as f32, p00y as f32);
 
-                        let p11x = p00x + cell_size;
-                        let p11y = p00y + cell_size;
+                        let p11x = p00x + 1;
+                        let p11y = p00y + 1;
                         let p11 = Pos2::new(p11x as f32, p11y as f32);
 
                         let rect = Rect::from_two_pos(to_screen * p00, to_screen * p11);

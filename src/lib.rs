@@ -55,6 +55,12 @@ pub struct LandscapeSettings {
     pub remove_water: bool,
 }
 
+impl LandscapeSettings {
+    pub fn cell_size(&self) -> usize {
+        self.texture_size * GRID_SIZE
+    }
+}
+
 impl Default for LandscapeSettings {
     fn default() -> Self {
         Self {

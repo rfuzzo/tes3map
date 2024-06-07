@@ -13,7 +13,6 @@ use crate::{
 pub fn compute_landscape_image(
     settings: &LandscapeSettings,
     dimensions: &Dimensions,
-    cell_size: usize,
     landscape_records: &HashMap<CellKey, Landscape>,
     ltex_records: &HashMap<u32, LandscapeTexture>,
     heights: &[f32],
@@ -21,7 +20,7 @@ pub fn compute_landscape_image(
 ) -> ColorImage {
     let d = dimensions;
     let texture_size = settings.texture_size;
-
+    let cell_size = settings.cell_size();
     let width = d.pixel_width(cell_size);
     let height = d.pixel_height(cell_size);
     let size = width * height;

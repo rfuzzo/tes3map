@@ -16,26 +16,18 @@ use crate::{
 };
 
 impl TemplateApp {
-    fn cellkey_from_screen(
-        &mut self,
-        from_screen: RectTransform,
-        pointer_pos: Pos2,
-        pixel_per_cell: usize,
-    ) -> CellKey {
+    fn cellkey_from_screen(&mut self, from_screen: RectTransform, pointer_pos: Pos2) -> CellKey {
         let transformed_position = from_screen * pointer_pos;
         // get cell grid
-        self.dimensions.tranform_to_cell(
-            Pos2::new(transformed_position.x, transformed_position.y),
-            pixel_per_cell as i32,
-        )
+        self.dimensions
+            .tranform_to_cell(Pos2::new(transformed_position.x, transformed_position.y))
     }
 
     fn get_rect_at_cell(&mut self, to_screen: RectTransform, key: CellKey) -> Rect {
-        let cell_size = self.cell_size();
-        let p00x = cell_size * self.dimensions.tranform_to_canvas_x(key.0);
-        let p00y = cell_size * self.dimensions.tranform_to_canvas_y(key.1);
+        let p00x = self.dimensions.tranform_to_canvas_x(key.0);
+        let p00y = self.dimensions.tranform_to_canvas_y(key.1);
         let p00 = Pos2::new(p00x as f32, p00y as f32);
-        let p11 = Pos2::new((p00x + cell_size) as f32, (p00y + cell_size) as f32);
+        let p11 = Pos2::new((p00x + 1) as f32, (p00y + 1) as f32);
         Rect::from_two_pos(to_screen * p00, to_screen * p11)
     }
 
@@ -94,8 +86,8 @@ impl TemplateApp {
         // zoomed and panned canvas
 
         // transforms
-        let pixel_width = self.dimensions.pixel_width(self.cell_size()) as f32;
-        let pixel_height = self.dimensions.pixel_height(self.cell_size()) as f32;
+        let pixel_width = self.dimensions.pixel_width(1) as f32;
+        let pixel_height = self.dimensions.pixel_height(1) as f32;
         let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
         let r = pixel_height / pixel_width;
 
@@ -117,7 +109,6 @@ impl TemplateApp {
         }
 
         // Overlays
-        let cell_size = self.cell_size();
         if self.ui_data.overlay_paths {
             if let Some(handle) = &self.paths_handle {
                 painter.image(handle.into(), canvas, uv, Color32::WHITE);
@@ -127,29 +118,25 @@ impl TemplateApp {
             let shapes = get_region_shapes(
                 to_screen,
                 &self.dimensions,
-                cell_size,
                 &self.regn_records,
                 &self.cell_records,
             );
             painter.extend(shapes);
         }
         if self.ui_data.overlay_grid {
-            let shapes = get_grid_shapes(to_screen, &self.dimensions, cell_size);
+            let shapes = get_grid_shapes(to_screen, &self.dimensions);
             painter.extend(shapes);
         }
         if self.ui_data.overlay_cities {
-            let shapes =
-                get_cities_shapes(to_screen, &self.dimensions, cell_size, &self.cell_records);
+            let shapes = get_cities_shapes(to_screen, &self.dimensions, &self.cell_records);
             painter.extend(shapes);
         }
         if self.ui_data.overlay_travel {
-            let shapes =
-                get_travel_shapes(to_screen, &self.dimensions, cell_size, &self.travel_edges);
+            let shapes = get_travel_shapes(to_screen, &self.dimensions, &self.travel_edges);
             painter.extend(shapes);
         }
         if self.ui_data.overlay_conflicts {
-            let shapes =
-                get_conflict_shapes(to_screen, &self.dimensions, cell_size, &self.cell_conflicts);
+            let shapes = get_conflict_shapes(to_screen, &self.dimensions, &self.cell_conflicts);
             painter.extend(shapes);
         }
 
@@ -165,7 +152,7 @@ impl TemplateApp {
 
         // hover
         if let Some(pointer_pos) = response.hover_pos() {
-            let key = self.cellkey_from_screen(from_screen, pointer_pos, self.cell_size());
+            let key = self.cellkey_from_screen(from_screen, pointer_pos);
             self.runtime_data.hover_pos = key;
 
             let mut tooltipinfo = TooltipInfo {
@@ -307,7 +294,7 @@ impl TemplateApp {
         if let Some(interact_pos) = painter.ctx().pointer_interact_pos() {
             if ui.ctx().input(|i| i.pointer.primary_clicked()) {
                 // if in the cell panel, we select the cell
-                let key = self.cellkey_from_screen(from_screen, interact_pos, self.cell_size());
+                let key = self.cellkey_from_screen(from_screen, interact_pos);
                 if self.cell_records.contains_key(&key) {
                     // toggle selection
                     if self.runtime_data.selected_id == Some(key) {
