@@ -87,9 +87,10 @@ impl TemplateApp {
         let pixel_width = self.dimensions.pixel_width() as f32;
         let pixel_height = self.dimensions.pixel_height() as f32;
         let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
+        let r = pixel_height / pixel_width;
 
         let min = self.zoom_data.drag_offset;
-        let max = Pos2::new(response.rect.max.x, response.rect.max.x) * self.zoom_data.zoom
+        let max = Pos2::new(response.rect.max.x, response.rect.max.x * r) * self.zoom_data.zoom
             + self.zoom_data.drag_offset.to_vec2();
         let canvas = Rect::from_min_max(min, max);
 
