@@ -87,7 +87,6 @@ impl TemplateApp {
                 }
 
                 if ui.button("Refresh").clicked() {
-                    self.dimensions.texture_size = self.ui_data.landscape_settings.texture_size;
                     self.reload_background(ctx, None, false, false);
 
                     if self.ui_data.overlay_paths {

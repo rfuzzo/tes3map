@@ -20,10 +20,9 @@ fn get_color_for_class(class: &str) -> Color32 {
 pub fn get_travel_shapes(
     to_screen: RectTransform,
     dimensions: &Dimensions,
+    cell_size: usize,
     edges: &HashMap<String, Vec<(CellKey, CellKey)>>,
 ) -> Vec<Shape> {
-    let cell_size = dimensions.cell_size() as f32;
-
     let shapes_len = edges
         .iter()
         .fold(0, |acc, (_, destinations)| acc + destinations.len());
@@ -34,8 +33,10 @@ pub fn get_travel_shapes(
         let color = get_color_for_class(class);
 
         for (key, value) in destinations {
-            let p00 = cell_size * (dimensions.tranform_to_canvas(*key) + Vec2::new(0.5, 0.5));
-            let p11 = cell_size * (dimensions.tranform_to_canvas(*value) + Vec2::new(0.5, 0.5));
+            let p00 =
+                cell_size as f32 * (dimensions.tranform_to_canvas(*key) + Vec2::new(0.5, 0.5));
+            let p11 =
+                cell_size as f32 * (dimensions.tranform_to_canvas(*value) + Vec2::new(0.5, 0.5));
 
             let line = Shape::LineSegment {
                 points: [to_screen * p00, to_screen * p11],

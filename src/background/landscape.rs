@@ -13,14 +13,17 @@ use crate::{
 pub fn compute_landscape_image(
     settings: &LandscapeSettings,
     dimensions: &Dimensions,
+    cell_size: usize,
     landscape_records: &HashMap<CellKey, Landscape>,
     ltex_records: &HashMap<u32, LandscapeTexture>,
     heights: &[f32],
     texture_map: &HashMap<String, ColorImage>,
 ) -> ColorImage {
     let d = dimensions;
-    let width = d.pixel_width(d.cell_size());
-    let height = d.pixel_height(d.cell_size());
+    let texture_size = settings.texture_size;
+
+    let width = d.pixel_width(cell_size);
+    let height = d.pixel_height(cell_size);
     let size = width * height;
 
     info!(
@@ -54,22 +57,22 @@ pub fn compute_landscape_image(
                                 }
 
                                 if let Some(texture) = texture_map.get(&texture_name) {
-                                    for x in 0..d.texture_size {
-                                        for y in 0..d.texture_size {
-                                            let index = (y * d.texture_size) + x;
+                                    for x in 0..texture_size {
+                                        for y in 0..texture_size {
+                                            let index = (y * texture_size) + x;
                                             let mut color = texture.pixels[index];
 
-                                            let tx = d.tranform_to_canvas_x(cx) * d.cell_size()
-                                                + gx * d.texture_size
+                                            let tx = d.tranform_to_canvas_x(cx) * cell_size
+                                                + gx * texture_size
                                                 + x;
-                                            let ty = d.tranform_to_canvas_y(cy) * d.cell_size()
-                                                + (GRID_SIZE - 1 - gy) * d.texture_size
+                                            let ty = d.tranform_to_canvas_y(cy) * cell_size
+                                                + (GRID_SIZE - 1 - gy) * texture_size
                                                 + y;
 
                                             // blend color when under water
                                             if settings.show_water {
-                                                let screenx = tx * VERTEX_CNT / d.cell_size();
-                                                let screeny = ty * VERTEX_CNT / d.cell_size();
+                                                let screenx = tx * VERTEX_CNT / cell_size;
+                                                let screeny = ty * VERTEX_CNT / cell_size;
 
                                                 if let Some(height) = height_from_screen_space(
                                                     heights, d, screenx, screeny,
@@ -90,7 +93,7 @@ pub fn compute_landscape_image(
                                                 }
                                             }
 
-                                            let i = (ty * d.stride(d.cell_size())) + tx;
+                                            let i = (ty * d.stride(cell_size)) + tx;
                                             pixels_color[i] = color;
                                         }
                                     }
@@ -104,16 +107,14 @@ pub fn compute_landscape_image(
                 for gx in 0..GRID_SIZE {
                     for gy in 0..GRID_SIZE {
                         // textures per tile
-                        for x in 0..d.texture_size {
-                            for y in 0..d.texture_size {
-                                let tx = d.tranform_to_canvas_x(cx) * d.cell_size()
-                                    + gx * d.texture_size
-                                    + x;
-                                let ty = d.tranform_to_canvas_y(cy) * d.cell_size()
-                                    + gy * d.texture_size
-                                    + y;
+                        for x in 0..texture_size {
+                            for y in 0..texture_size {
+                                let tx =
+                                    d.tranform_to_canvas_x(cx) * cell_size + gx * texture_size + x;
+                                let ty =
+                                    d.tranform_to_canvas_y(cy) * cell_size + gy * texture_size + y;
 
-                                let i = (ty * d.stride(d.cell_size())) + tx;
+                                let i = (ty * d.stride(cell_size)) + tx;
 
                                 pixels_color[i] = DEFAULT_COLOR;
                             }
@@ -125,7 +126,7 @@ pub fn compute_landscape_image(
     }
 
     ColorImage {
-        size: d.pixel_size_tuple(d.cell_size()),
+        size: d.pixel_size_tuple(cell_size),
         pixels: pixels_color,
     }
 }

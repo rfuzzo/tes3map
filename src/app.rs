@@ -92,6 +92,10 @@ impl TemplateApp {
         Default::default()
     }
 
+    pub fn cell_size(&self) -> usize {
+        self.ui_data.landscape_settings.texture_size * GRID_SIZE
+    }
+
     pub fn reload_paths(&mut self, ctx: &egui::Context) {
         let image = get_overlay_path_image(&self.dimensions, &self.land_records);
         self.paths_handle = Some(ctx.load_texture("paths", image, Default::default()));
@@ -101,27 +105,27 @@ impl TemplateApp {
         // if the resolution is the same, no need to reload
         let max_texture_resolution = self.dimensions.get_max_texture_resolution(max_texture_side);
         if max_texture_resolution > self.texture_map_resolution
-            && self.texture_map_resolution == self.dimensions.texture_size
-            && self.dimensions.texture_size == self.ui_data.landscape_settings.texture_size
+            && self.texture_map_resolution == self.ui_data.landscape_settings.texture_size
         {
             debug!("Texture resolution is the same, no need to reload");
             return;
         }
 
         // otherwise check if possible
-        let width = self.dimensions.pixel_width(self.dimensions.cell_size());
-        let height = self.dimensions.pixel_height(self.dimensions.cell_size());
+        let width = self.dimensions.pixel_width(self.cell_size());
+        let height = self.dimensions.pixel_height(self.cell_size());
         if width > max_texture_side || height > max_texture_side {
             error!(
                 "Texture size too large: (width: {}, height: {}), supported side: {}, max_texture_side: {}",
                 width, height, max_texture_side, max_texture_resolution
             );
 
-            debug!("cell size {}", self.dimensions.cell_size());
-            debug!("texture_size {}", self.dimensions.texture_size);
+            debug!(
+                "texture_size {}",
+                self.ui_data.landscape_settings.texture_size
+            );
             debug!("Resetting texture size to 16");
 
-            self.dimensions.texture_size = 16.min(max_texture_resolution);
             self.ui_data.landscape_settings.texture_size = 16.min(max_texture_resolution);
 
             // rfd messagebox
@@ -137,7 +141,7 @@ impl TemplateApp {
         }
 
         self.texture_map.clear();
-        let texture_size = self.dimensions.texture_size;
+        let texture_size = self.ui_data.landscape_settings.texture_size;
         self.texture_map_resolution = texture_size;
 
         debug!("Populating texture map with resolution: {}", texture_size);
@@ -221,13 +225,8 @@ impl TemplateApp {
         // calculate dimensions
         if let Some(dimensions) = new_dimensions {
             self.dimensions = dimensions.clone();
-            self.ui_data.landscape_settings.texture_size = dimensions.texture_size;
         } else if recalculate_dimensions {
-            self.dimensions = calculate_dimensions(
-                &self.dimensions,
-                &self.land_records,
-                self.ui_data.landscape_settings.texture_size,
-            );
+            self.dimensions = calculate_dimensions(&self.dimensions, &self.land_records);
         }
 
         // calculate heights
@@ -275,6 +274,7 @@ impl TemplateApp {
         compute_landscape_image(
             &self.ui_data.landscape_settings,
             &self.dimensions,
+            self.cell_size(),
             &self.land_records,
             &self.ltex_records,
             &self.heights,
@@ -291,5 +291,9 @@ impl TemplateApp {
         self.zoom_data.drag_delta = None;
         self.zoom_data.drag_offset = Pos2::default();
         self.zoom_data.drag_start = Pos2::default();
+    }
+
+    pub(crate) fn texture_size(&self) -> f32 {
+        self.ui_data.landscape_settings.texture_size as f32
     }
 }

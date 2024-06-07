@@ -266,7 +266,6 @@ fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), ImageError> {
 fn calculate_dimensions(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
-    texture_size: usize,
 ) -> Dimensions {
     let mut min_x: Option<i32> = None;
     let mut min_y: Option<i32> = None;
@@ -318,7 +317,6 @@ fn calculate_dimensions(
         min_y,
         max_x,
         max_y,
-        texture_size,
         min_z: dimensions.min_z,
         max_z: dimensions.max_z,
     }

@@ -4,7 +4,7 @@ use egui::Pos2;
 
 use crate::{CellKey, GRID_SIZE};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Dimensions {
     pub min_x: i32,
     pub min_y: i32,
@@ -13,33 +13,13 @@ pub struct Dimensions {
 
     pub min_z: f32,
     pub max_z: f32,
-
-    pub texture_size: usize,
-}
-
-impl Default for Dimensions {
-    fn default() -> Self {
-        Self {
-            min_x: Default::default(),
-            min_y: Default::default(),
-            max_x: Default::default(),
-            max_y: Default::default(),
-            min_z: Default::default(),
-            max_z: Default::default(),
-            texture_size: 16,
-        }
-    }
 }
 
 impl Dimensions {
-    pub fn cell_size(&self) -> usize {
-        self.texture_size * GRID_SIZE
-    }
-
-    pub fn width(&self) -> usize {
+    fn width(&self) -> usize {
         (1 + self.max_x - self.min_x).max(0) as usize
     }
-    pub fn height(&self) -> usize {
+    fn height(&self) -> usize {
         (1 + self.max_y - self.min_y).max(0) as usize
     }
     fn size(&self) -> usize {
@@ -64,18 +44,18 @@ impl Dimensions {
         ]
     }
 
-    pub fn tranform_to_cell_x(&self, x: i32) -> i32 {
+    fn tranform_to_cell_x(&self, x: i32) -> i32 {
         x + self.min_x
     }
 
-    pub fn tranform_to_cell_y(&self, y: i32) -> i32 {
+    fn tranform_to_cell_y(&self, y: i32) -> i32 {
         self.max_y - y
     }
 
-    pub fn tranform_to_cell(&self, pos: Pos2) -> CellKey {
+    pub fn tranform_to_cell(&self, pos: Pos2, pixel_per_cell: i32) -> CellKey {
         (
-            self.tranform_to_cell_x(pos.x as i32 / self.cell_size() as i32),
-            self.tranform_to_cell_y(pos.y as i32 / self.cell_size() as i32),
+            self.tranform_to_cell_x(pos.x as i32 / pixel_per_cell),
+            self.tranform_to_cell_y(pos.y as i32 / pixel_per_cell),
         )
     }
 

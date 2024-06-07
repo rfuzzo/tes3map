@@ -69,21 +69,19 @@ impl TemplateApp {
             let x = cell_key.0;
             let y = cell_key.1;
 
-            let mut dimensions = Dimensions {
+            let dimensions = Dimensions {
                 min_x: x,
                 min_y: y,
                 max_x: x,
                 max_y: y,
                 min_z: 0.0,
                 max_z: 0.0,
-                texture_size: 32,
             };
 
             let max_texture_side = ctx.input(|i| i.max_texture_side);
-            let max_texture_resolution =
-                dimensions.get_max_texture_resolution(max_texture_side);
-            dimensions.texture_size = max_texture_resolution;
-            
+            let max_texture_resolution = dimensions.get_max_texture_resolution(max_texture_side);
+            self.ui_data.landscape_settings.texture_size = max_texture_resolution;
+
             self.reload_background(ctx, Some(dimensions), true, true);
         }
     }

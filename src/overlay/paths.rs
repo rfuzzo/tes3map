@@ -15,10 +15,10 @@ pub fn color_map_to_pixels(
     let max_y = dimensions.max_y;
     let min_y = dimensions.min_y;
 
-    let nx = dimensions.width() * VERTEX_CNT;
-    let ny = dimensions.height() * VERTEX_CNT;
-    let size = nx * ny;
-    let mut pixels_color = vec![Color32::WHITE; size];
+    let width = dimensions.pixel_width(VERTEX_CNT);
+    let height = dimensions.pixel_height(VERTEX_CNT);
+    let size = width * height;
+    let mut pixels_color = vec![Color32::TRANSPARENT; size];
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
@@ -31,7 +31,7 @@ pub fn color_map_to_pixels(
                         let tx = tx + x;
                         let ty = ty + y;
 
-                        let i = (ty * nx) + tx;
+                        let i = (ty * width) + tx;
                         pixels_color[i] = *value;
                     }
                 }
@@ -41,7 +41,7 @@ pub fn color_map_to_pixels(
                         let tx = tx + x;
                         let ty = ty + y;
 
-                        let i = (ty * nx) + tx;
+                        let i = (ty * width) + tx;
 
                         pixels_color[i] = DEFAULT_COLOR;
                     }

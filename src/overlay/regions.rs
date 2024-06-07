@@ -8,11 +8,10 @@ use crate::{dimensions::Dimensions, CellKey};
 pub fn get_region_shapes(
     to_screen: RectTransform,
     dimensions: &Dimensions,
+    cell_size: usize,
     regn_records: &HashMap<String, Region>,
     cell_records: &HashMap<CellKey, Cell>,
 ) -> Vec<Shape> {
-    let cell_size = dimensions.cell_size();
-
     let shapes_len =
         (dimensions.max_x - dimensions.min_x + 1) * (dimensions.max_y - dimensions.min_y + 1);
     let mut shapes: Vec<Shape> = Vec::with_capacity(shapes_len as usize);

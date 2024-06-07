@@ -9,9 +9,9 @@ use crate::{dimensions::Dimensions, CellKey};
 pub fn get_cities_shapes(
     to_screen: RectTransform,
     dimensions: &Dimensions,
+    cell_size: usize,
     cell_records: &HashMap<CellKey, Cell>,
 ) -> Vec<Shape> {
-    let cell_size = dimensions.cell_size();
     let color = Color32::from_rgb(202, 165, 96);
     let shapes_len =
         (dimensions.max_x - dimensions.min_x + 1) * (dimensions.max_y - dimensions.min_y + 1);
