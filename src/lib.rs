@@ -8,9 +8,10 @@ use std::{
 
 use egui::{Color32, ColorImage, Pos2};
 use image::{
-    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
-    DynamicImage, ImageError, RgbaImage,
+    DynamicImage,
+    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind}, ImageError, RgbaImage,
 };
+use log::info;
 use seahash::hash;
 use serde::{Deserialize, Serialize};
 use tes3::esp::{
@@ -19,6 +20,8 @@ use tes3::esp::{
 
 pub use app::TemplateApp;
 use dimensions::Dimensions;
+
+use crate::app::TooltipInfo;
 
 mod app;
 mod background;
@@ -43,16 +46,43 @@ pub enum EBackground {
     GameMap,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct SavedUiData {
-    pub depth_spectrum: i32,
-    pub depth_base: Color32,
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct LandscapeSettings {
+    pub texture_size: usize, // landscape
+}
 
-    pub height_spectrum: i32,
-    pub height_base: Color32,
+impl Default for LandscapeSettings {
+    fn default() -> Self {
+        Self {
+            // landscape
+            texture_size: 16,
+        }
+    }
+}
 
-    pub alpha: u8,
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct HeightmapSettings {
+    pub depth_spectrum: i32,  // heightmap
+    pub depth_base: Color32,  // heightmap
+    pub height_spectrum: i32, // heightmap
+    pub height_base: Color32, // heightmap
+}
 
+impl Default for HeightmapSettings {
+    fn default() -> Self {
+        Self {
+            // heightmap
+            height_spectrum: -120,
+            height_base: Color32::from_rgb(0, 204, 0), // HSV(120,100,80)
+
+            depth_spectrum: 70,
+            depth_base: Color32::from_rgb(0, 204, 204), // HSV(180,100,80)
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+pub struct SavedData {
     // background
     // you can only have one background
     pub background: EBackground,
@@ -67,38 +97,24 @@ pub struct SavedUiData {
     pub overlay_conflicts: bool,
 
     pub show_tooltips: bool,
-    pub texture_size: usize,
+
+    // settings
+    pub landscape_settings: LandscapeSettings,
+    pub heightmap_settings: HeightmapSettings,
 }
 
-impl Default for SavedUiData {
-    fn default() -> Self {
-        Self {
-            // map color settings
-            height_spectrum: -120,
-            height_base: Color32::from_rgb(0, 204, 0), // HSV(120,100,80)
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeData {
+    pub plugin_filter: String,
+    pub cell_filter: String,
 
-            depth_spectrum: 70,
-            depth_base: Color32::from_rgb(0, 204, 204), // HSV(180,100,80)
+    pub info: TooltipInfo,
 
-            alpha: 100,
-
-            // overlays
-            background: EBackground::default(),
-            overlay_paths: false,
-            overlay_region: false,
-            overlay_grid: false,
-            overlay_cities: false,
-            overlay_travel: false,
-            overlay_conflicts: false,
-
-            show_tooltips: false,
-
-            texture_size: 16,
-        }
-    }
+    pub selected_id: Option<CellKey>,
+    pub hover_pos: CellKey,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ZoomData {
     drag_start: Pos2,
     drag_delta: Option<Pos2>,
@@ -251,9 +267,10 @@ fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), ImageError> {
 }
 
 fn calculate_dimensions(
+    dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
     texture_size: usize,
-) -> Option<Dimensions> {
+) -> Dimensions {
     let mut min_x: Option<i32> = None;
     let mut min_y: Option<i32> = None;
     let mut max_x: Option<i32> = None;
@@ -294,23 +311,28 @@ fn calculate_dimensions(
         }
     }
 
-    let min_y = min_y?;
-    let max_y = max_y?;
-    let min_x = min_x?;
-    let max_x = max_x?;
-    let dimensions = Dimensions {
+    let min_y = min_y.unwrap();
+    let max_y = max_y.unwrap();
+    let min_x = min_x.unwrap();
+    let max_x = max_x.unwrap();
+
+    Dimensions {
         min_x,
         min_y,
         max_x,
         max_y,
         texture_size,
-        min_z: 0.0, //TODO
-        max_z: 0.0,
-    };
-    Some(dimensions)
+        min_z: dimensions.min_z,
+        max_z: dimensions.max_z,
+    }
 }
 
 pub fn get_layered_image(dimensions: &Dimensions, img: ColorImage, img2: ColorImage) -> ColorImage {
+    // log size
+    let size1 = img.size;
+    let size2 = img2.size;
+    info!("size 1 {:?} size 2 {:?}", size1, size2);
+
     // base image
     let mut layered = img.pixels.clone();
 

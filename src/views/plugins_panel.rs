@@ -63,11 +63,11 @@ impl TemplateApp {
                 }
             }
 
-            ui.visuals_mut().override_text_color = Some(egui::Color32::DARK_GREEN);
+            ui.visuals_mut().override_text_color = Some(Color32::DARK_GREEN);
             if ui.button("Load").clicked() {
                 self.load_plugin_data();
-                self.reload_background(ctx, None);
-                self.reload_paths(ctx, true);
+                self.reload_background(ctx, None, true, true);
+                self.reload_paths(ctx);
             }
             ui.visuals_mut().override_text_color = None;
         });
@@ -77,10 +77,10 @@ impl TemplateApp {
         // search bar
         ui.horizontal(|ui| {
             ui.label("Filter: ");
-            ui.text_edit_singleline(&mut self.plugin_filter);
+            ui.text_edit_singleline(&mut self.runtime_data.plugin_filter);
             // clear filter button
             if ui.button("x").clicked() {
-                self.plugin_filter.clear();
+                self.runtime_data.plugin_filter.clear();
             }
         });
 
@@ -94,10 +94,10 @@ impl TemplateApp {
                         // upper and lowercase search
                         let name = vm.get_name();
 
-                        if !self.plugin_filter.is_empty()
+                        if !self.runtime_data.plugin_filter.is_empty()
                             && !name
                                 .to_lowercase()
-                                .contains(&self.plugin_filter.to_lowercase())
+                                .contains(&self.runtime_data.plugin_filter.to_lowercase())
                         {
                             continue;
                         }

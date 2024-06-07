@@ -73,7 +73,10 @@ impl eframe::App for TemplateApp {
                     self.dimensions.max_y
                 ));
                 ui.separator();
-                ui.label(get_cell_name(&self.cell_records, self.hover_pos));
+                ui.label(get_cell_name(
+                    &self.cell_records,
+                    self.runtime_data.hover_pos,
+                ));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(format!("{} {}", NAME, VERSION));

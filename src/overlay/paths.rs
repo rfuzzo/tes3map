@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use egui::Color32;
 use tes3::esp::{Landscape, LandscapeFlags};
 
-use crate::{CellKey, Dimensions, DEFAULT_COLOR, VERTEX_CNT};
+use crate::{CellKey, DEFAULT_COLOR, Dimensions, VERTEX_CNT};
 
 pub fn color_map_to_pixels(
     dimensions: Dimensions,
@@ -53,10 +53,59 @@ pub fn color_map_to_pixels(
     pixels_color
 }
 
+// adapted from https://github.com/GNOME/gimp/blob/b0d16685940a5c17689166b7d42c8aa61f39ebb4/app/operations/layer-modes/gimpoperationlayermode-blend.c#L1180
+fn color_erase_white(color: Color32) -> Color32 {
+    let epsilon = 0.000001;
+    let mut alpha = 0.0f32;
+    let bgcolor = Color32::WHITE;
+
+    for c in 0..3 {
+        let r = color[c] as f32 / 255.0;
+        let bgr = bgcolor[c] as f32 / 255.0;
+
+        let col = r.clamp(0.0, 1.0);
+        let bgcol = bgr.clamp(0.0, 1.0);
+
+        if (col - bgcol).abs() > epsilon {
+            let a = if col > bgcol {
+                (col - bgcol) / (1.0 - bgcol)
+            } else {
+                (bgcol - col) / bgcol
+            };
+
+            alpha = alpha.max(a);
+        }
+    }
+    let mut comp = [0.0f32; 4];
+
+    if alpha > epsilon {
+        let alpha_inv = 1.0 / alpha;
+
+        for c in 0..3 {
+            let color_c = color[c] as f32 / 255.0;
+            let bgcolor_c = bgcolor[c] as f32 / 255.0;
+            comp[c] = (color_c - bgcolor_c) * alpha_inv + bgcolor_c;
+        }
+    } else {
+        comp[0] = 0.0;
+        comp[1] = 0.0;
+        comp[2] = 0.0;
+    }
+
+    comp[3] = alpha;
+
+    // to color32
+    let r = (comp[0] * 255.0).clamp(0.0, 255.0) as u8;
+    let g = (comp[1] * 255.0).clamp(0.0, 255.0) as u8;
+    let b = (comp[2] * 255.0).clamp(0.0, 255.0) as u8;
+    let a = (comp[3] * 255.0).clamp(0.0, 255.0) as u8;
+
+    Color32::from_rgba_unmultiplied(r, g, b, a)
+}
+
 pub fn get_color_pixels(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
-    alpha: u8,
 ) -> Vec<Color32> {
     let mut color_map: HashMap<CellKey, [[Color32; 65]; 65]> = HashMap::default();
     let d = dimensions.clone();
@@ -80,14 +129,10 @@ pub fn get_color_pixels(
                             let g = data[y][x][1];
                             let b = data[y][x][2];
 
-                            let ratio = (r as f32 + g as f32 + b as f32) / (3_f32 * 255_f32);
-                            let temp = (1_f32 - ratio).clamp(0.0, 1.0);
+                            let mut rgb = Color32::from_rgba_unmultiplied(r, g, b, 255);
+                            // subtract white from rgb
+                            rgb = color_erase_white(rgb);
 
-                            let c = alpha as f32 / 100_f32;
-                            let alpha = if temp < c { temp / c } else { 1_f32 };
-
-                            let rgb =
-                                Color32::from_rgba_unmultiplied(r, g, b, (255_f32 * alpha) as u8);
                             colors[y][x] = rgb;
                         }
                     }

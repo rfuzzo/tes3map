@@ -4,7 +4,7 @@ impl TemplateApp {
     pub fn cell_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Cells");
         if ui.button("Paint all").clicked() {
-            self.reload_background(ctx, None);
+            self.reload_background(ctx, None, true, true);
         }
 
         ui.separator();
@@ -12,10 +12,10 @@ impl TemplateApp {
         // search bar
         ui.horizontal(|ui| {
             ui.label("Filter: ");
-            ui.text_edit_singleline(&mut self.cell_filter);
+            ui.text_edit_singleline(&mut self.runtime_data.cell_filter);
             // clear filter button
             if ui.button("x").clicked() {
-                self.plugin_filter.clear();
+                self.runtime_data.plugin_filter.clear();
             }
         });
 
@@ -29,15 +29,15 @@ impl TemplateApp {
                     // upper and lowercase search
                     let cell_name = self.cell_records.get(key).unwrap().name.clone();
                     let label_text = format!("{:?} - {}", key, cell_name);
-                    if !self.cell_filter.is_empty()
+                    if !self.runtime_data.cell_filter.is_empty()
                         && !label_text
                             .to_lowercase()
-                            .contains(&self.cell_filter.to_lowercase())
+                            .contains(&self.runtime_data.cell_filter.to_lowercase())
                     {
                         continue;
                     }
 
-                    if let Some(selected_key) = self.selected_id {
+                    if let Some(selected_key) = self.runtime_data.selected_id {
                         if selected_key == *key {
                             ui.visuals_mut().override_text_color = Some(egui::Color32::RED);
                         } else {
@@ -48,7 +48,7 @@ impl TemplateApp {
                     let label = egui::Label::new(label_text).sense(egui::Sense::click());
                     let response = ui.add(label);
                     if response.clicked() {
-                        self.selected_id = Some(*key);
+                        self.runtime_data.selected_id = Some(*key);
                     }
                 }
             });

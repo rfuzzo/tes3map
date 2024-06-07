@@ -2,13 +2,13 @@ use eframe::emath::{pos2, Pos2, Rect, RectTransform};
 use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
 
+use crate::{CellKey, EBackground, height_from_screen_space, save_image, TemplateApp, VERTEX_CNT};
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::conflicts::get_conflict_shapes;
 use crate::overlay::grid::get_grid_shapes;
 use crate::overlay::regions::get_region_shapes;
 use crate::overlay::travel::get_travel_shapes;
-use crate::{height_from_screen_space, save_image, CellKey, EBackground, TemplateApp, VERTEX_CNT};
 
 impl TemplateApp {
     fn cellkey_from_screen(&mut self, from_screen: RectTransform, pointer_pos: Pos2) -> CellKey {
@@ -110,7 +110,6 @@ impl TemplateApp {
         // Overlays
         if self.ui_data.overlay_paths {
             if let Some(handle) = &self.paths_handle {
-                // TODO overlay paths
                 painter.image(handle.into(), canvas, uv, Color32::WHITE);
             }
         }
@@ -141,7 +140,7 @@ impl TemplateApp {
         }
 
         // overlay selected cell
-        if let Some(key) = self.selected_id {
+        if let Some(key) = self.runtime_data.selected_id {
             let rect = self.get_rect_at_cell(to_screen, key);
             let shape =
                 Shape::rect_stroke(rect, Rounding::default(), Stroke::new(4.0, Color32::RED));
@@ -153,7 +152,7 @@ impl TemplateApp {
         // hover
         if let Some(pointer_pos) = response.hover_pos() {
             let key = self.cellkey_from_screen(from_screen, pointer_pos);
-            self.hover_pos = key;
+            self.runtime_data.hover_pos = key;
 
             let mut tooltipinfo = TooltipInfo {
                 key,
@@ -191,11 +190,11 @@ impl TemplateApp {
                 }
             }
 
-            self.info = tooltipinfo;
+            self.runtime_data.info = tooltipinfo;
 
             if self.ui_data.show_tooltips {
                 egui::show_tooltip(ui.ctx(), egui::Id::new("hover_tooltip"), |ui| {
-                    let info = self.info.clone();
+                    let info = self.runtime_data.info.clone();
                     ui.label(format!("{:?} - {}", info.key, info.cell_name));
                     ui.label(format!("Region: {}", info.region));
 
@@ -233,11 +232,11 @@ impl TemplateApp {
                 let key = self.cellkey_from_screen(from_screen, interact_pos);
                 if self.cell_records.contains_key(&key) {
                     // toggle selection
-                    if self.selected_id == Some(key) {
+                    if self.runtime_data.selected_id == Some(key) {
                         // toggle off if the same cell is clicked
-                        self.selected_id = None;
+                        self.runtime_data.selected_id = None;
                     } else {
-                        self.selected_id = Some(key);
+                        self.runtime_data.selected_id = Some(key);
                     }
                 }
             }
@@ -332,20 +331,21 @@ impl TemplateApp {
                     }
 
                     if let Some(image) = image {
-                        if let Err(e) = save_image(&original_path, &image) {
-                            println!("{}", e)
+                        // TODO save shape overlays
+
+                        let msg = if let Err(e) = save_image(&original_path, &image) {
+                            format!("Error saving image: {}", e)
                         } else {
                             // message
-                            let msg = format!("Image saved to: {}", original_path.display());
-                            rfd::MessageDialog::new()
-                                .set_title("Info")
-                                .set_description(msg)
-                                .set_buttons(rfd::MessageButtons::Ok)
-                                .show();
-                        }
-                    }
+                            format!("Image saved to: {}", original_path.display())
+                        };
 
-                    // TODO save overlays
+                        rfd::MessageDialog::new()
+                            .set_title("Info")
+                            .set_description(msg)
+                            .set_buttons(rfd::MessageButtons::Ok)
+                            .show();
+                    }
 
                     ui.close_menu();
                 }

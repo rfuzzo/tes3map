@@ -30,15 +30,13 @@ pub struct TooltipInfo {
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct TemplateApp {
     pub data_files: Option<PathBuf>,
-    pub ui_data: SavedUiData,
+    pub ui_data: SavedData,
 
     // ui
     #[serde(skip)]
     pub zoom_data: ZoomData,
     #[serde(skip)]
     pub dimensions: Dimensions,
-    #[serde(skip)]
-    pub heights: Vec<f32>,
 
     // tes3
     #[serde(skip)]
@@ -64,22 +62,14 @@ pub struct TemplateApp {
     pub background_handle: Option<egui::TextureHandle>,
     #[serde(skip)]
     pub paths_handle: Option<egui::TextureHandle>,
-
-    // app
     #[serde(skip)]
-    pub hover_pos: CellKey,
+    pub heights: Vec<f32>,
+
+    // runtime data
     #[serde(skip)]
     pub side_panel_view: ESidePanelView,
     #[serde(skip)]
-    pub info: TooltipInfo,
-    #[serde(skip)]
-    pub current_landscape: Option<Landscape>,
-    #[serde(skip)]
-    pub selected_id: Option<CellKey>,
-    #[serde(skip)]
-    pub cell_filter: String,
-    #[serde(skip)]
-    pub plugin_filter: String,
+    pub runtime_data: RuntimeData,
 }
 
 impl TemplateApp {
@@ -97,71 +87,63 @@ impl TemplateApp {
         Default::default()
     }
 
-    pub fn reload_paths(&mut self, ctx: &egui::Context, reload: bool) {
-        if reload {
-            self.paths_handle = None;
-        }
-
-        if self.paths_handle.is_none() {
-            let image = self.get_overlay_path_image();
-            let _: &egui::TextureHandle = self
-                .paths_handle
-                .get_or_insert_with(|| ctx.load_texture("paths", image, Default::default()));
-        }
+    pub fn reload_paths(&mut self, ctx: &egui::Context) {
+        let image = self.get_overlay_path_image();
+        self.paths_handle = Some(ctx.load_texture("paths", image, Default::default()));
     }
 
     /// Assigns landscape_records, dimensions and pixels
-    pub fn reload_background(&mut self, ctx: &egui::Context, new_dimensions: Option<Dimensions>) {
-        self.background_handle = None;
-
+    pub fn reload_background(
+        &mut self,
+        ctx: &egui::Context,
+        new_dimensions: Option<Dimensions>,
+        recalculate_dimensions: bool,
+        recalculate_heights: bool,
+    ) {
         // calculate dimensions
         if let Some(dimensions) = new_dimensions {
             self.dimensions = dimensions.clone();
-        } else {
-            let Some(dimensions) =
-                calculate_dimensions(&self.land_records, self.ui_data.texture_size)
-            else {
-                return;
-            };
-
-            self.dimensions = dimensions.clone();
+        } else if recalculate_dimensions {
+            self.dimensions = calculate_dimensions(
+                &self.dimensions,
+                &self.land_records,
+                self.ui_data.landscape_settings.texture_size,
+            );
         }
 
         // calculate heights
-        if let Some(heights) = calculate_heights(&self.land_records, &mut self.dimensions) {
-            self.heights = heights;
-
-            match self.ui_data.background {
-                EBackground::None => {
-                    // do nothing
-                }
-                EBackground::Landscape => {
-                    let max_texture_side = ctx.input(|i| i.max_texture_side);
-                    let image = self.get_landscape_image(max_texture_side);
-                    let _: &egui::TextureHandle = self.background_handle.get_or_insert_with(|| {
-                        ctx.load_texture("background", image, Default::default())
-                    });
-                }
-                EBackground::HeightMap => {
-                    let image = self.get_heightmap_image();
-                    let _: &egui::TextureHandle = self.background_handle.get_or_insert_with(|| {
-                        ctx.load_texture("background", image, Default::default())
-                    });
-                }
-                EBackground::GameMap => {
-                    let image = self.get_gamemap_image();
-                    let _: &egui::TextureHandle = self.background_handle.get_or_insert_with(|| {
-                        ctx.load_texture("background", image, Default::default())
-                    });
-                }
+        if recalculate_heights {
+            if let Some(heights) = calculate_heights(&self.land_records, &mut self.dimensions) {
+                self.heights = heights;
             }
+        }
+
+        let image = match self.ui_data.background {
+            EBackground::None => None,
+            EBackground::Landscape => {
+                let max_texture_side = ctx.input(|i| i.max_texture_side);
+                Some(self.get_landscape_image(max_texture_side))
+            }
+            EBackground::HeightMap => Some(self.get_heightmap_image()),
+            EBackground::GameMap => Some(self.get_gamemap_image()),
+        };
+
+        if let Some(image) = image {
+            self.background_handle =
+                Some(ctx.load_texture("background", image, Default::default()));
+        } else {
+            self.background_handle = None;
         }
     }
 
     // Shortcuts
 
     pub fn get_heightmap_image(&mut self) -> ColorImage {
-        generate_heightmap(&self.heights, &self.dimensions, self.ui_data)
+        generate_heightmap(
+            &self.heights,
+            &self.dimensions,
+            &self.ui_data.heightmap_settings,
+        )
     }
 
     pub fn get_gamemap_image(&mut self) -> ColorImage {
@@ -221,13 +203,11 @@ impl TemplateApp {
         img2.pixels.clone_from(&overlay::paths::get_color_pixels(
             &self.dimensions,
             &self.land_records,
-            self.ui_data.alpha,
         ));
         img2
     }
 
     // UI methods
-
     pub fn reset_zoom(&mut self) {
         self.zoom_data.zoom = 1.0;
     }
