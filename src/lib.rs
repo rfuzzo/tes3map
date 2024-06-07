@@ -49,6 +49,8 @@ pub enum EBackground {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct LandscapeSettings {
     pub texture_size: usize, // landscape
+    pub show_water: bool,
+    pub remove_water: bool,
 }
 
 impl Default for LandscapeSettings {
@@ -56,6 +58,8 @@ impl Default for LandscapeSettings {
         Self {
             // landscape
             texture_size: 16,
+            show_water: true,
+            remove_water: false,
         }
     }
 }

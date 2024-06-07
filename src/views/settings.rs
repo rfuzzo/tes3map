@@ -115,16 +115,39 @@ impl TemplateApp {
     }
 
     fn landscape_settings_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {
-        let settings = &mut self.ui_data.landscape_settings;
         ui.label("Landscape settings");
+
+        ui.checkbox(&mut self.ui_data.realtime_update, "Realtime update");
 
         let max_texture_side = ctx.input(|i| i.max_texture_side);
         let max_texture_resolution = self.dimensions.get_max_texture_resolution(max_texture_side);
 
         ui.add(
-            egui::Slider::new(&mut settings.texture_size, 2..=max_texture_resolution)
-                .text("Texture Resolution"),
+            egui::Slider::new(
+                &mut self.ui_data.landscape_settings.texture_size,
+                2..=max_texture_resolution,
+            )
+            .text("Texture Resolution"),
         );
+
+        if ui
+            .checkbox(
+                &mut self.ui_data.landscape_settings.show_water,
+                "Render water",
+            )
+            .changed()
+        {
+            self.reload_background(ctx, None, false, false);
+        }
+        if ui
+            .checkbox(
+                &mut self.ui_data.landscape_settings.remove_water,
+                "Clip water",
+            )
+            .changed()
+        {
+            self.reload_background(ctx, None, false, false);
+        }
     }
 
     fn heightmap_settings_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {

@@ -275,6 +275,7 @@ impl TemplateApp {
         let dimensions = &mut self.dimensions;
 
         if let Some(i) = compute_landscape_image(
+            &self.ui_data.landscape_settings,
             dimensions,
             &self.land_records,
             &self.ltex_records,

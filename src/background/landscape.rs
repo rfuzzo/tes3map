@@ -5,12 +5,13 @@ use log::info;
 use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture};
 
 use crate::{
-    height_from_screen_space, overlay_colors_with_alpha, CellKey, Dimensions, DEFAULT_COLOR,
-    GRID_SIZE, VERTEX_CNT,
+    height_from_screen_space, overlay_colors_with_alpha, CellKey, Dimensions, LandscapeSettings,
+    DEFAULT_COLOR, GRID_SIZE, VERTEX_CNT,
 };
 
 /// Compute a landscape image from the given landscape records and texture map.
 pub fn compute_landscape_image(
+    settings: &LandscapeSettings,
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
     ltex_records: &HashMap<u32, LandscapeTexture>,
@@ -58,27 +59,34 @@ pub fn compute_landscape_image(
                                             let index = (y * d.texture_size) + x;
                                             let mut color = texture.pixels[index];
 
-                                            // blend color when under water
                                             let tx = d.tranform_to_canvas_x(cx) * d.cell_size()
                                                 + gx * d.texture_size
                                                 + x;
                                             let ty = d.tranform_to_canvas_y(cy) * d.cell_size()
                                                 + (GRID_SIZE - 1 - gy) * d.texture_size
                                                 + y;
-                                            let screenx = tx * VERTEX_CNT / d.cell_size();
-                                            let screeny = ty * VERTEX_CNT / d.cell_size();
 
-                                            if let Some(height) = height_from_screen_space(
-                                                heights, dimensions, screenx, screeny,
-                                            ) {
-                                                if height < 0_f32 {
-                                                    let a = 0.5;
+                                            // blend color when under water
+                                            if settings.show_water {
+                                                let screenx = tx * VERTEX_CNT / d.cell_size();
+                                                let screeny = ty * VERTEX_CNT / d.cell_size();
 
-                                                    color = overlay_colors_with_alpha(
-                                                        color,
-                                                        Color32::BLUE,
-                                                        a,
-                                                    );
+                                                if let Some(height) = height_from_screen_space(
+                                                    heights, dimensions, screenx, screeny,
+                                                ) {
+                                                    if height < 0_f32 {
+                                                        let a = 0.5;
+
+                                                        if settings.remove_water {
+                                                            color = Color32::TRANSPARENT;
+                                                        } else {
+                                                            color = overlay_colors_with_alpha(
+                                                                color,
+                                                                Color32::BLUE,
+                                                                a,
+                                                            );
+                                                        }
+                                                    }
                                                 }
                                             }
 
