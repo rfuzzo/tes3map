@@ -58,7 +58,8 @@ impl Dimensions {
     }
 
     pub fn get_max_texture_resolution(&self, max_texture_side: usize) -> usize {
-        max_texture_side / (GRID_SIZE * max(self.width(), self.height()))
+        let max = max_texture_side / (GRID_SIZE * max(self.width(), self.height()));
+        max.min(256)
     }
 
     pub fn pixel_width(&self) -> usize {

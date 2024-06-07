@@ -2,7 +2,9 @@ use eframe::emath::{pos2, Pos2, Rect, RectTransform};
 use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
 
-use crate::{CellKey, EBackground, GRID_SIZE, height_from_screen_space, save_image, TemplateApp, VERTEX_CNT};
+use crate::{
+    CellKey, EBackground, GRID_SIZE, height_from_screen_space, save_image, TemplateApp, VERTEX_CNT,
+};
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::conflicts::get_conflict_shapes;
@@ -153,8 +155,6 @@ impl TemplateApp {
             let key = self.cellkey_from_screen(from_screen, pointer_pos);
             self.runtime_data.hover_pos = key;
 
-           
-
             let mut tooltipinfo = TooltipInfo {
                 key,
                 height: 0.0,
@@ -174,7 +174,8 @@ impl TemplateApp {
             // get height
             if self.ui_data.background == EBackground::HeightMap {
                 let transformed_position = from_screen * pointer_pos;
-                let r = VERTEX_CNT as f32 /(self.dimensions.texture_size as f32 * GRID_SIZE as f32);
+                let r =
+                    VERTEX_CNT as f32 / (self.dimensions.texture_size as f32 * GRID_SIZE as f32);
                 let x = transformed_position.x as f32 * r;
                 let y = transformed_position.y as f32 * r;
 
@@ -230,23 +231,6 @@ impl TemplateApp {
             }
         }
 
-        // click
-        if let Some(interact_pos) = painter.ctx().pointer_interact_pos() {
-            if ui.ctx().input(|i| i.pointer.primary_clicked()) {
-                // if in the cell panel, we select the cell
-                let key = self.cellkey_from_screen(from_screen, interact_pos);
-                if self.cell_records.contains_key(&key) {
-                    // toggle selection
-                    if self.runtime_data.selected_id == Some(key) {
-                        // toggle off if the same cell is clicked
-                        self.runtime_data.selected_id = None;
-                    } else {
-                        self.runtime_data.selected_id = Some(key);
-                    }
-                }
-            }
-        }
-
         // panning
         if response.drag_started() {
             if let Some(drag_start) = response.interact_pointer_pos() {
@@ -290,6 +274,11 @@ impl TemplateApp {
             if ui.button("Reset zoom").clicked() {
                 self.reset_pan();
                 self.reset_zoom();
+                ui.close_menu();
+            }
+
+            if ui.button("Paint cell").clicked() {
+                self.paint_cell(ctx);
                 ui.close_menu();
             }
 
@@ -357,5 +346,22 @@ impl TemplateApp {
                 }
             }
         });
+
+        // click
+        if let Some(interact_pos) = painter.ctx().pointer_interact_pos() {
+            if ui.ctx().input(|i| i.pointer.primary_clicked()) {
+                // if in the cell panel, we select the cell
+                let key = self.cellkey_from_screen(from_screen, interact_pos);
+                if self.cell_records.contains_key(&key) {
+                    // toggle selection
+                    if self.runtime_data.selected_id == Some(key) {
+                        // toggle off if the same cell is clicked
+                        self.runtime_data.selected_id = None;
+                    } else {
+                        self.runtime_data.selected_id = Some(key);
+                    }
+                }
+            }
+        }
     }
 }

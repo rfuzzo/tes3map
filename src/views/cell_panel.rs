@@ -1,11 +1,21 @@
+use egui::Context;
+
+use crate::dimensions::Dimensions;
 use crate::TemplateApp;
 
 impl TemplateApp {
     pub fn cell_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Cells");
-        if ui.button("Paint all").clicked() {
-            self.reload_background(ctx, None, true, true);
-        }
+
+        // horizontal layout
+        ui.horizontal(|ui| {
+            if ui.button("Reset").clicked() {
+                self.reload_background(ctx, None, true, true);
+            }
+            if ui.button("Paint selected").clicked() {
+                self.paint_cell(ctx);
+            }
+        });
 
         ui.separator();
 
@@ -52,5 +62,29 @@ impl TemplateApp {
                     }
                 }
             });
+    }
+
+    pub fn paint_cell(&mut self, ctx: &Context) {
+        if let Some(cell_key) = self.runtime_data.selected_id {
+            let x = cell_key.0;
+            let y = cell_key.1;
+
+            let mut dimensions = Dimensions {
+                min_x: x,
+                min_y: y,
+                max_x: x,
+                max_y: y,
+                min_z: 0.0,
+                max_z: 0.0,
+                texture_size: 32,
+            };
+
+            let max_texture_side = ctx.input(|i| i.max_texture_side);
+            let max_texture_resolution =
+                dimensions.get_max_texture_resolution(max_texture_side);
+            dimensions.texture_size = max_texture_resolution;
+            
+            self.reload_background(ctx, Some(dimensions), true, true);
+        }
     }
 }

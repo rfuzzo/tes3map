@@ -98,7 +98,11 @@ impl TemplateApp {
 
     pub fn populate_texture_map(&mut self, max_texture_side: usize) {
         // if the resolution is the same, no need to reload
-        if self.texture_map_resolution == self.dimensions.texture_size {
+        let max_texture_resolution = self.dimensions.get_max_texture_resolution(max_texture_side);
+        if max_texture_resolution > self.texture_map_resolution
+            && self.texture_map_resolution == self.dimensions.texture_size
+            && self.dimensions.texture_size == self.ui_data.landscape_settings.texture_size
+        {
             debug!("Texture resolution is the same, no need to reload");
             return;
         }
@@ -107,9 +111,6 @@ impl TemplateApp {
         let width = self.dimensions.pixel_width();
         let height = self.dimensions.pixel_height();
         if width > max_texture_side || height > max_texture_side {
-            let max_texture_resolution =
-                self.dimensions.get_max_texture_resolution(max_texture_side);
-
             error!(
                 "Texture size too large: (width: {}, height: {}), supported side: {}, max_texture_side: {}",
                 width, height, max_texture_side, max_texture_resolution
@@ -217,6 +218,7 @@ impl TemplateApp {
         // calculate dimensions
         if let Some(dimensions) = new_dimensions {
             self.dimensions = dimensions.clone();
+            self.ui_data.landscape_settings.texture_size = dimensions.texture_size;
         } else if recalculate_dimensions {
             self.dimensions = calculate_dimensions(
                 &self.dimensions,
