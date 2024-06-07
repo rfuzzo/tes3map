@@ -4,8 +4,8 @@ use eframe::emath::RectTransform;
 use eframe::epaint::{Color32, Shape, Stroke};
 use egui::Vec2;
 
-use crate::CellKey;
 use crate::dimensions::Dimensions;
+use crate::CellKey;
 
 fn get_color_for_class(class: &str) -> Color32 {
     match class {

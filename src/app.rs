@@ -120,8 +120,8 @@ impl TemplateApp {
             debug!("texture_size {}", self.dimensions.texture_size);
             debug!("Resetting texture size to 16");
 
-            self.dimensions.texture_size = 16;
-            self.ui_data.landscape_settings.texture_size = 16;
+            self.dimensions.texture_size = 16.min(max_texture_resolution);
+            self.ui_data.landscape_settings.texture_size = 16.min(max_texture_resolution);
 
             // rfd messagebox
             let msg = format!(

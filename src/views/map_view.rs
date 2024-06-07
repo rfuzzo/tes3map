@@ -2,15 +2,15 @@ use eframe::emath::{pos2, Pos2, Rect, RectTransform};
 use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
 
-use crate::{
-    CellKey, EBackground, GRID_SIZE, height_from_screen_space, save_image, TemplateApp, VERTEX_CNT,
-};
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::conflicts::get_conflict_shapes;
 use crate::overlay::grid::get_grid_shapes;
 use crate::overlay::regions::get_region_shapes;
 use crate::overlay::travel::get_travel_shapes;
+use crate::{
+    height_from_screen_space, save_image, CellKey, EBackground, TemplateApp, GRID_SIZE, VERTEX_CNT,
+};
 
 impl TemplateApp {
     fn cellkey_from_screen(&mut self, from_screen: RectTransform, pointer_pos: Pos2) -> CellKey {
@@ -286,65 +286,9 @@ impl TemplateApp {
             ui.separator();
 
             if ui.button("Save as image").clicked() {
-                // construct default name from the first plugin name then the background type abbreviated
-                let background_name = match self.ui_data.background {
-                    EBackground::None => "",
-                    EBackground::Landscape => "l",
-                    EBackground::HeightMap => "h",
-                    EBackground::GameMap => "g",
-                };
-                let first_plugin = self
-                    .plugins
-                    .as_ref()
-                    .unwrap()
-                    .iter()
-                    .filter(|p| p.enabled)
-                    .nth(0)
-                    .unwrap();
-                let plugin_name = first_plugin.get_name();
-                let defaultname = format!("{}_{}.png", plugin_name, background_name);
+                self.save_image(ctx);
 
-                let file_option = rfd::FileDialog::new()
-                    .add_filter("png", &["png"])
-                    .set_file_name(defaultname)
-                    .save_file();
-
-                if let Some(original_path) = file_option {
-                    let mut image = None;
-                    match self.ui_data.background {
-                        EBackground::None => {}
-                        EBackground::Landscape => {
-                            let max_texture_side = ctx.input(|i| i.max_texture_side);
-                            self.populate_texture_map(max_texture_side);
-                            image = Some(self.get_landscape_image());
-                        }
-                        EBackground::HeightMap => {
-                            image = Some(self.get_heightmap_image());
-                        }
-                        EBackground::GameMap => {
-                            image = Some(self.get_gamemap_image());
-                        }
-                    }
-
-                    if let Some(image) = image {
-                        // TODO save shape overlays
-
-                        let msg = if let Err(e) = save_image(&original_path, &image) {
-                            format!("Error saving image: {}", e)
-                        } else {
-                            // message
-                            format!("Image saved to: {}", original_path.display())
-                        };
-
-                        rfd::MessageDialog::new()
-                            .set_title("Info")
-                            .set_description(msg)
-                            .set_buttons(rfd::MessageButtons::Ok)
-                            .show();
-                    }
-
-                    ui.close_menu();
-                }
+                ui.close_menu();
             }
         });
 
@@ -362,6 +306,66 @@ impl TemplateApp {
                         self.runtime_data.selected_id = Some(key);
                     }
                 }
+            }
+        }
+    }
+
+    fn save_image(&mut self, ctx: &egui::Context) {
+        // construct default name from the first plugin name then the background type abbreviated
+        let background_name = match self.ui_data.background {
+            EBackground::None => "",
+            EBackground::Landscape => "l",
+            EBackground::HeightMap => "h",
+            EBackground::GameMap => "g",
+        };
+        let first_plugin = self
+            .plugins
+            .as_ref()
+            .unwrap()
+            .iter()
+            .filter(|p| p.enabled)
+            .nth(0)
+            .unwrap();
+        let plugin_name = first_plugin.get_name();
+        let defaultname = format!("{}_{}.png", plugin_name, background_name);
+
+        let file_option = rfd::FileDialog::new()
+            .add_filter("png", &["png"])
+            .set_file_name(defaultname)
+            .save_file();
+
+        if let Some(original_path) = file_option {
+            let mut image = None;
+            match self.ui_data.background {
+                EBackground::None => {}
+                EBackground::Landscape => {
+                    let max_texture_side = ctx.input(|i| i.max_texture_side);
+                    self.populate_texture_map(max_texture_side);
+                    image = Some(self.get_landscape_image());
+                }
+                EBackground::HeightMap => {
+                    image = Some(self.get_heightmap_image());
+                }
+                EBackground::GameMap => {
+                    image = Some(self.get_gamemap_image());
+                }
+            }
+
+            if let Some(image) = image {
+                // TODO save shape overlays
+
+                let msg = if let Err(e) = save_image(&original_path, &image) {
+                    format!("Error saving image: {}", e)
+                } else {
+                    // message
+                    format!("Image saved to: {}", original_path.display())
+                };
+
+                rfd::MessageDialog::new()
+                    .set_title("Info")
+                    .set_description(msg)
+                    .set_buttons(rfd::MessageButtons::Ok)
+                    .show();
             }
         }
     }
