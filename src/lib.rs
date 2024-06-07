@@ -8,10 +8,10 @@ use std::{
 
 use egui::{Color32, ColorImage, Pos2};
 use image::{
-    DynamicImage,
-    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind}, ImageError, RgbaImage,
+    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
+    DynamicImage, ImageError, RgbaImage,
 };
-use log::info;
+use log::{info, warn};
 use seahash::hash;
 use serde::{Deserialize, Serialize};
 use tes3::esp::{
@@ -343,28 +343,54 @@ pub fn get_layered_image(dimensions: &Dimensions, img: ColorImage, img2: ColorIm
 }
 
 fn load_texture(data_files: &Option<PathBuf>, ltex: &LandscapeTexture) -> Option<ColorImage> {
-    // data files
     let data_files = data_files.as_ref()?;
 
-    let texture = ltex.file_name.clone();
-    let tex_path = data_files.join("Textures").join(texture);
-    if !tex_path.exists() {
+    let _tex_path = data_files.join("Textures").join(ltex.file_name.clone());
+
+    let tga_path = _tex_path.with_extension("tga");
+    let dds_path = _tex_path.with_extension("dds");
+    let bmp_path = _tex_path.with_extension("bmp");
+
+    if !tga_path.exists() && !dds_path.exists() && !bmp_path.exists() {
+        warn!("Texture not found: {:?}", _tex_path);
         return None;
     }
 
     // decode image
+    if let Some(value) = decode_image(dds_path) {
+        return Some(value);
+    }
+    if let Some(value) = decode_image(tga_path) {
+        return Some(value);
+    }
+    if let Some(value) = decode_image(bmp_path) {
+        return Some(value);
+    }
+
+    None
+}
+
+fn decode_image(tex_path: PathBuf) -> Option<ColorImage> {
     if let Ok(mut reader) = image::io::Reader::open(&tex_path) {
-        let ext = tex_path.extension().unwrap().to_string_lossy();
+        let ext = tex_path
+            .extension()
+            .unwrap()
+            .to_string_lossy()
+            .to_lowercase();
         if ext.contains("tga") {
             reader.set_format(image::ImageFormat::Tga);
         } else if ext.contains("dds") {
             reader.set_format(image::ImageFormat::Dds);
+        } else if ext.contains("bmp") {
+            reader.set_format(image::ImageFormat::Bmp);
         } else {
             // not supported
+            warn!("Texture format not supported: {:?}", tex_path);
             return None;
         }
 
         let Ok(image) = reader.decode() else {
+            log::error!("Error decoding texture: {:?}", tex_path);
             return None;
         };
 
@@ -373,7 +399,6 @@ fn load_texture(data_files: &Option<PathBuf>, ltex: &LandscapeTexture) -> Option
         let pixels = image_buffer.as_flat_samples();
         return Some(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()));
     }
-
     None
 }
 

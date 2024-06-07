@@ -2,19 +2,20 @@ use std::collections::HashMap;
 
 use egui::{Color32, ColorImage};
 use log::info;
-use tes3::esp::{Landscape, LandscapeFlags};
+use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture};
 
 use crate::{
-    CellKey, DEFAULT_COLOR, Dimensions, GRID_SIZE, height_from_screen_space,
-    overlay_colors_with_alpha, VERTEX_CNT,
+    height_from_screen_space, overlay_colors_with_alpha, CellKey, Dimensions, DEFAULT_COLOR,
+    GRID_SIZE, VERTEX_CNT,
 };
 
 /// Compute a landscape image from the given landscape records and texture map.
 pub fn compute_landscape_image(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
+    ltex_records: &HashMap<u32, LandscapeTexture>,
     heights: &[f32],
-    texture_map: &HashMap<u32, ColorImage>,
+    texture_map: &HashMap<String, ColorImage>,
 ) -> Option<ColorImage> {
     let d = dimensions;
     let size = d.pixel_size(d.cell_size());
@@ -43,8 +44,15 @@ pub fn compute_landscape_image(
                                 let dy = (4 * (gy / 4)) + (gx / 4);
 
                                 let key = data[dy][dx] as u32;
+                                let mut texture_name = String::new();
+                                if let Some(ltex) = ltex_records.get(&key) {
+                                    texture_name.clone_from(&ltex.file_name);
+                                }
+                                if texture_name.is_empty() {
+                                    continue;
+                                }
 
-                                if let Some(texture) = texture_map.get(&key) {
+                                if let Some(texture) = texture_map.get(&texture_name) {
                                     for x in 0..d.texture_size {
                                         for y in 0..d.texture_size {
                                             let index = (y * d.texture_size) + x;

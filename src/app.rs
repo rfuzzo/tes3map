@@ -67,7 +67,7 @@ pub struct TemplateApp {
     #[serde(skip)]
     pub texture_map_resolution: usize,
     #[serde(skip)]
-    pub texture_map: HashMap<u32, ColorImage>,
+    pub texture_map: HashMap<String, ColorImage>,
 
     // runtime data
     #[serde(skip)]
@@ -157,45 +157,47 @@ impl TemplateApp {
 
                                     let key = data[dy][dx] as u32;
 
-                                    // lazy load texture
-                                    if let std::collections::hash_map::Entry::Vacant(e) =
-                                        self.texture_map.entry(key)
-                                    {
-                                        // load texture
-                                        if let Some(ltex) = self.ltex_records.get(&key) {
-                                            if let Some(tex) = load_texture(&self.data_files, ltex)
-                                            {
-                                                // transform texture and downsize
+                                    // load texture
+                                    if let Some(ltex) = self.ltex_records.get(&key) {
+                                        // texture name
+                                        let texture_name = ltex.file_name.clone();
+                                        if self.texture_map.contains_key(&texture_name) {
+                                            continue;
+                                        }
 
-                                                // scale texture to fit the texture_size
-                                                let mut pixels = vec![
-                                                    Color32::TRANSPARENT;
-                                                    texture_size * texture_size
-                                                ];
+                                        if let Some(tex) = load_texture(&self.data_files, ltex) {
+                                            // transform texture and downsize
 
-                                                // textures per tile
-                                                for x in 0..texture_size {
-                                                    for y in 0..texture_size {
-                                                        // pick every nth pixel from the texture to downsize
-                                                        let sx =
-                                                            x * (TEXTURE_MAX_SIZE / texture_size);
-                                                        let sy =
-                                                            y * (TEXTURE_MAX_SIZE / texture_size);
-                                                        let index = (sy * texture_size) + sx;
-                                                        let color = tex.pixels[index];
+                                            // scale texture to fit the texture_size
+                                            let mut pixels = vec![
+                                                Color32::TRANSPARENT;
+                                                texture_size * texture_size
+                                            ];
 
-                                                        let i = (y * texture_size) + x;
-                                                        pixels[i] = color;
-                                                    }
+                                            // textures per tile
+                                            for x in 0..texture_size {
+                                                for y in 0..texture_size {
+                                                    // pick every nth pixel from the texture to downsize
+                                                    let sx = x * (TEXTURE_MAX_SIZE / texture_size);
+                                                    let sy = y * (TEXTURE_MAX_SIZE / texture_size);
+                                                    let index = (sy * texture_size) + sx;
+                                                    let color = tex.pixels[index];
+
+                                                    let i = (y * texture_size) + x;
+                                                    pixels[i] = color;
                                                 }
-
-                                                let downsized_texture = ColorImage {
-                                                    size: [texture_size, texture_size],
-                                                    pixels,
-                                                };
-
-                                                e.insert(downsized_texture);
                                             }
+
+                                            let downsized_texture = ColorImage {
+                                                size: [texture_size, texture_size],
+                                                pixels,
+                                            };
+
+                                            info!("Loaded texture: {}", ltex.file_name);
+                                            self.texture_map
+                                                .insert(texture_name, downsized_texture);
+                                        } else {
+                                            error!("Failed to load texture: {}", ltex.file_name);
                                         }
                                     }
                                 }
@@ -275,6 +277,7 @@ impl TemplateApp {
         if let Some(i) = compute_landscape_image(
             dimensions,
             &self.land_records,
+            &self.ltex_records,
             &self.heights,
             &self.texture_map,
         ) {
