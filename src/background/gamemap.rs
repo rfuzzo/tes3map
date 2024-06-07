@@ -5,50 +5,46 @@ use tes3::esp::Landscape;
 
 use crate::{CellKey, Dimensions};
 
+static GRID: usize = 9;
+
 pub fn generate_map(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
 ) -> ColorImage {
-    let grid = 9;
-    let height = dimensions.height() * grid;
-    let width = dimensions.width() * grid;
+    let height = dimensions.pixel_height(GRID);
+    let width = dimensions.pixel_width(GRID);
+    let size = height * width;
 
     // calculate map size
-    let map_len = height * width;
-    let mut map: Vec<Color32> = Vec::with_capacity(map_len);
+    let mut pixels: Vec<Color32> = Vec::with_capacity(size);
 
     for grid_y in 0..height {
         for grid_x in (0..width).rev() {
             // we can divide by grid to get the cell and subtract the bounds to get the cell coordinates
-            let x = (grid_x / grid) as i32 + dimensions.min_x;
-            let y = (grid_y / grid) as i32 + dimensions.min_y;
+            let x = (grid_x / GRID) as i32 + dimensions.min_x;
+            let y = (grid_y / GRID) as i32 + dimensions.min_y;
 
             // get LAND record
             let key = (x, y);
             if let Some(land) = landscape_records.get(&key) {
                 // get remainder
-                let hx = grid_x % grid;
-                let hy = grid_y % grid;
+                let hx = grid_x % GRID;
+                let hy = grid_y % GRID;
 
                 let heightmap = land.world_map_data.data.clone().to_vec();
-                map.push(get_map_color(heightmap[hy][hx] as f32));
+                pixels.push(get_map_color(heightmap[hy][hx] as f32));
             } else {
-                map.push(Color32::TRANSPARENT);
+                pixels.push(Color32::TRANSPARENT);
             }
         }
     }
 
-    let mut pixels: Vec<u8> = vec![];
-    map.reverse();
-    for c in map {
-        pixels.push(c.r());
-        pixels.push(c.g());
-        pixels.push(c.b());
-        pixels.push(c.a());
-    }
+    pixels.reverse();
 
-    let size: [usize; 2] = [width, height];
-    ColorImage::from_rgba_premultiplied(size, &pixels)
+    ColorImage {
+        pixels,
+        size: [width, height],
+    }
 }
 
 /// https://github.com/NullCascade/morrowind-mods/blob/master/User%20Interface%20Expansion/plugin_source/PatchWorldMap.cpp#L158

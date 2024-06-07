@@ -7,6 +7,7 @@ use std::{
 };
 
 use egui::{Color32, ColorImage, Pos2};
+use errors::SizeMismatchError;
 use image::{
     error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
     DynamicImage, ImageError, RgbaImage,
@@ -27,6 +28,7 @@ mod app;
 mod background;
 mod dimensions;
 mod eframe_app;
+mod errors;
 mod overlay;
 mod views;
 
@@ -322,11 +324,13 @@ fn calculate_dimensions(
     }
 }
 
-pub fn get_layered_image(dimensions: &Dimensions, img: ColorImage, img2: ColorImage) -> ColorImage {
-    // log size
-    let size1 = img.size;
-    let size2 = img2.size;
-    info!("size 1 {:?} size 2 {:?}", size1, size2);
+pub fn get_layered_image(
+    img: ColorImage,
+    img2: ColorImage,
+) -> Result<ColorImage, SizeMismatchError> {
+    if img.size != img2.size {
+        return Err(SizeMismatchError);
+    }
 
     // base image
     let mut layered = img.pixels.clone();
@@ -338,12 +342,10 @@ pub fn get_layered_image(dimensions: &Dimensions, img: ColorImage, img2: ColorIm
     }
 
     // create new colorImage
-    let mut layered_img = ColorImage::new(
-        dimensions.pixel_size_tuple(VERTEX_CNT),
-        Color32::TRANSPARENT,
-    );
-    layered_img.pixels = layered;
-    layered_img
+    Ok(ColorImage {
+        pixels: layered,
+        size: img.size,
+    })
 }
 
 fn load_texture(data_files: &Option<PathBuf>, ltex: &LandscapeTexture) -> Option<ColorImage> {

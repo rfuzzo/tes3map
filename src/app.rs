@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use egui::{Color32, ColorImage, Pos2};
 use log::{debug, error};
+use overlay::paths::get_overlay_path_image;
 use tes3::esp::{Landscape, Region};
 
 use background::{
@@ -92,7 +93,7 @@ impl TemplateApp {
     }
 
     pub fn reload_paths(&mut self, ctx: &egui::Context) {
-        let image = self.get_overlay_path_image();
+        let image = get_overlay_path_image(&self.dimensions, &self.land_records);
         self.paths_handle = Some(ctx.load_texture("paths", image, Default::default()));
     }
 
@@ -108,8 +109,8 @@ impl TemplateApp {
         }
 
         // otherwise check if possible
-        let width = self.dimensions.pixel_width();
-        let height = self.dimensions.pixel_height();
+        let width = self.dimensions.pixel_width(self.dimensions.cell_size());
+        let height = self.dimensions.pixel_height(self.dimensions.cell_size());
         if width > max_texture_side || height > max_texture_side {
             error!(
                 "Texture size too large: (width: {}, height: {}), supported side: {}, max_texture_side: {}",
@@ -271,39 +272,14 @@ impl TemplateApp {
     }
 
     pub fn get_landscape_image(&mut self) -> ColorImage {
-        // glow supports textures up to this
-        let dimensions = &mut self.dimensions;
-
-        if let Some(i) = compute_landscape_image(
+        compute_landscape_image(
             &self.ui_data.landscape_settings,
-            dimensions,
+            &self.dimensions,
             &self.land_records,
             &self.ltex_records,
             &self.heights,
             &self.texture_map,
-        ) {
-            i
-        } else {
-            // default image
-            ColorImage::new(
-                [
-                    dimensions.width() * dimensions.cell_size(),
-                    dimensions.height() * dimensions.cell_size(),
-                ],
-                Color32::BLACK,
-            )
-        }
-    }
-
-    pub fn get_overlay_path_image(&mut self) -> ColorImage {
-        let mut img2 =
-            ColorImage::new(self.dimensions.pixel_size_tuple(VERTEX_CNT), Color32::WHITE);
-
-        img2.pixels.clone_from(&overlay::paths::get_color_pixels(
-            &self.dimensions,
-            &self.land_records,
-        ));
-        img2
+        )
     }
 
     // UI methods

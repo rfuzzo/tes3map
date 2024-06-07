@@ -1,15 +1,18 @@
 use eframe::emath::{pos2, Pos2, Rect, RectTransform};
 use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
+use log::info;
 
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::conflicts::get_conflict_shapes;
 use crate::overlay::grid::get_grid_shapes;
+use crate::overlay::paths;
 use crate::overlay::regions::get_region_shapes;
 use crate::overlay::travel::get_travel_shapes;
 use crate::{
-    height_from_screen_space, save_image, CellKey, EBackground, TemplateApp, GRID_SIZE, VERTEX_CNT,
+    get_layered_image, height_from_screen_space, save_image, CellKey, EBackground, TemplateApp,
+    GRID_SIZE, VERTEX_CNT,
 };
 
 impl TemplateApp {
@@ -84,8 +87,8 @@ impl TemplateApp {
         // zoomed and panned canvas
 
         // transforms
-        let pixel_width = self.dimensions.pixel_width() as f32;
-        let pixel_height = self.dimensions.pixel_height() as f32;
+        let pixel_width = self.dimensions.pixel_width(self.dimensions.cell_size()) as f32;
+        let pixel_height = self.dimensions.pixel_height(self.dimensions.cell_size()) as f32;
         let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
         let r = pixel_height / pixel_width;
 
@@ -353,12 +356,23 @@ impl TemplateApp {
 
             if let Some(image) = image {
                 // TODO save shape overlays
+                let size_image = image.size;
+                let paths = paths::get_overlay_path_image(&self.dimensions, &self.land_records);
+                let size_paths = paths.size;
 
-                let msg = if let Err(e) = save_image(&original_path, &image) {
-                    format!("Error saving image: {}", e)
-                } else {
-                    // message
-                    format!("Image saved to: {}", original_path.display())
+                info!("Image size: {:?}", size_image);
+                info!("Paths size: {:?}", size_paths);
+
+                let msg = match get_layered_image(image, paths) {
+                    Ok(r) => match save_image(&original_path, &r) {
+                        Err(e) => format!("Error saving image: {}", e),
+                        Ok(_) => {
+                            format!("Image saved to: {}", original_path.display())
+                        }
+                    },
+                    Err(err) => {
+                        format!("Error saving image: {:?}", err)
+                    }
                 };
 
                 rfd::MessageDialog::new()

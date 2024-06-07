@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use egui::Color32;
+use egui::{Color32, ColorImage};
 use tes3::esp::{Landscape, LandscapeFlags};
 
-use crate::{CellKey, DEFAULT_COLOR, Dimensions, VERTEX_CNT};
+use crate::{CellKey, Dimensions, DEFAULT_COLOR, VERTEX_CNT};
 
 pub fn color_map_to_pixels(
     dimensions: Dimensions,
@@ -103,10 +103,10 @@ fn color_erase_white(color: Color32) -> Color32 {
     Color32::from_rgba_unmultiplied(r, g, b, a)
 }
 
-pub fn get_color_pixels(
+pub fn get_overlay_path_image(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
-) -> Vec<Color32> {
+) -> ColorImage {
     let mut color_map: HashMap<CellKey, [[Color32; 65]; 65]> = HashMap::default();
     let d = dimensions.clone();
 
@@ -142,5 +142,8 @@ pub fn get_color_pixels(
         }
     }
 
-    color_map_to_pixels(d, color_map)
+    ColorImage {
+        pixels: color_map_to_pixels(d, color_map),
+        size: dimensions.pixel_size_tuple(VERTEX_CNT),
+    }
 }

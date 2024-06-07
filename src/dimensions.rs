@@ -46,6 +46,13 @@ impl Dimensions {
         self.width() * self.height()
     }
 
+    pub fn pixel_width(&self, pixel_per_cell: usize) -> usize {
+        self.width() * pixel_per_cell
+    }
+    pub fn pixel_height(&self, pixel_per_cell: usize) -> usize {
+        self.height() * pixel_per_cell
+    }
+
     pub fn pixel_size(&self, pixel_per_cell: usize) -> usize {
         self.size() * pixel_per_cell * pixel_per_cell
     }
@@ -55,18 +62,6 @@ impl Dimensions {
             self.width() * pixel_per_cell,
             self.height() * pixel_per_cell,
         ]
-    }
-
-    pub fn get_max_texture_resolution(&self, max_texture_side: usize) -> usize {
-        let max = max_texture_side / (GRID_SIZE * max(self.width(), self.height()));
-        max.min(256)
-    }
-
-    pub fn pixel_width(&self) -> usize {
-        self.width() * self.cell_size()
-    }
-    pub fn pixel_height(&self) -> usize {
-        self.height() * self.cell_size()
     }
 
     pub fn tranform_to_cell_x(&self, x: i32) -> i32 {
@@ -101,5 +96,10 @@ impl Dimensions {
 
     pub fn stride(&self, pixel_per_cell: usize) -> usize {
         self.width() * pixel_per_cell
+    }
+
+    pub fn get_max_texture_resolution(&self, max_texture_side: usize) -> usize {
+        let max = max_texture_side / (GRID_SIZE * max(self.width(), self.height()));
+        max.min(256)
     }
 }

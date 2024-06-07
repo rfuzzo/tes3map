@@ -17,12 +17,12 @@ pub fn compute_landscape_image(
     ltex_records: &HashMap<u32, LandscapeTexture>,
     heights: &[f32],
     texture_map: &HashMap<String, ColorImage>,
-) -> Option<ColorImage> {
+) -> ColorImage {
     let d = dimensions;
-    let size = d.pixel_size(d.cell_size());
-    let size_tuple = d.pixel_size_tuple(d.cell_size());
-    let width = size_tuple[0];
-    let height = size_tuple[1];
+    let width = d.pixel_width(d.cell_size());
+    let height = d.pixel_height(d.cell_size());
+    let size = width * height;
+
     info!(
         "Generating textured image with size {} (width: {}, height: {})",
         size, width, height,
@@ -72,7 +72,7 @@ pub fn compute_landscape_image(
                                                 let screeny = ty * VERTEX_CNT / d.cell_size();
 
                                                 if let Some(height) = height_from_screen_space(
-                                                    heights, dimensions, screenx, screeny,
+                                                    heights, d, screenx, screeny,
                                                 ) {
                                                     if height < 0_f32 {
                                                         let a = 0.5;
@@ -124,7 +124,8 @@ pub fn compute_landscape_image(
         }
     }
 
-    let mut img = ColorImage::new(d.pixel_size_tuple(d.cell_size()), Color32::GOLD);
-    img.pixels = pixels_color;
-    Some(img)
+    ColorImage {
+        size: d.pixel_size_tuple(d.cell_size()),
+        pixels: pixels_color,
+    }
 }
