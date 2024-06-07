@@ -320,7 +320,8 @@ impl TemplateApp {
                         EBackground::None => {}
                         EBackground::Landscape => {
                             let max_texture_side = ctx.input(|i| i.max_texture_side);
-                            image = Some(self.get_landscape_image(max_texture_side));
+                            self.populate_texture_map(max_texture_side);
+                            image = Some(self.get_landscape_image());
                         }
                         EBackground::HeightMap => {
                             image = Some(self.get_heightmap_image());

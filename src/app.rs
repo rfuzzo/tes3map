@@ -64,6 +64,10 @@ pub struct TemplateApp {
     pub paths_handle: Option<egui::TextureHandle>,
     #[serde(skip)]
     pub heights: Vec<f32>,
+    #[serde(skip)]
+    pub texture_map_resolution: usize,
+    #[serde(skip)]
+    pub texture_map: HashMap<u32, ColorImage>,
 
     // runtime data
     #[serde(skip)]
@@ -90,6 +94,116 @@ impl TemplateApp {
     pub fn reload_paths(&mut self, ctx: &egui::Context) {
         let image = self.get_overlay_path_image();
         self.paths_handle = Some(ctx.load_texture("paths", image, Default::default()));
+    }
+
+    pub fn populate_texture_map(&mut self, max_texture_side: usize) {
+        // if the resolution is the same, no need to reload
+        if self.texture_map_resolution == self.dimensions.texture_size {
+            debug!("Texture resolution is the same, no need to reload");
+            return;
+        }
+        
+        // otherwise check if possible
+        let width = self.dimensions.pixel_width();
+        let height = self.dimensions.pixel_hieght();
+        if width > max_texture_side || height > max_texture_side {
+            let max_texture_resolution = self.dimensions.get_max_texture_resolution(max_texture_side);
+
+            error!(
+                "Texture size too large: (width: {}, height: {}), supported side: {}, max_texture_side: {}",
+                width, height, max_texture_side, max_texture_resolution
+            );
+
+            debug!("cell size {}", self.dimensions.cell_size());
+            debug!("texture_size {}", self.dimensions.texture_size);
+            debug!("Resetting texture size to 16");
+
+            self.dimensions.texture_size = 16;
+            self.ui_data.landscape_settings.texture_size = 16;
+
+            // rfd messagebox
+            let msg = format!(
+                "Texture size too large, supported side: {}",
+                max_texture_resolution
+            );
+            rfd::MessageDialog::new()
+                .set_title("Error")
+                .set_description(msg)
+                .set_buttons(rfd::MessageButtons::Ok)
+                .show();
+        }
+       
+        self.texture_map.clear();
+        let texture_size = self.dimensions.texture_size;
+        self.texture_map_resolution = texture_size;
+        
+        debug!("Populating texture map with resolution: {}", texture_size);
+
+        for cy in self.dimensions.min_y..self.dimensions.max_y + 1 {
+            for cx in self.dimensions.min_x..self.dimensions.max_x + 1 {
+                if let Some(landscape) = self.land_records.get(&(cx, cy)) {
+                    if landscape
+                        .landscape_flags
+                        .contains(LandscapeFlags::USES_TEXTURES)
+                    {
+                        {
+                            let data = &landscape.texture_indices.data;
+                            for gx in 0..GRID_SIZE {
+                                for gy in 0..GRID_SIZE {
+                                    let dx = (4 * (gy % 4)) + (gx % 4);
+                                    let dy = (4 * (gy / 4)) + (gx / 4);
+
+                                    let key = data[dy][dx] as u32;
+
+                                    // lazy load texture
+                                    if let std::collections::hash_map::Entry::Vacant(e) =
+                                        self.texture_map.entry(key)
+                                    {
+                                        // load texture
+                                        if let Some(ltex) = self.ltex_records.get(&key) {
+                                            if let Some(tex) = load_texture(&self.data_files, ltex)
+                                            {
+                                                // transform texture and downsize
+
+                                                // scale texture to fit the texture_size
+                                                let mut pixels = vec![
+                                                    Color32::TRANSPARENT;
+                                                    texture_size
+                                                        * texture_size
+                                                ];
+
+                                                // textures per tile
+                                                for x in 0..texture_size {
+                                                    for y in 0..texture_size {
+                                                        // pick every nth pixel from the texture to downsize
+                                                        let sx =
+                                                            x * (TEXTURE_MAX_SIZE / texture_size);
+                                                        let sy =
+                                                            y * (TEXTURE_MAX_SIZE / texture_size);
+                                                        let index = (sy * texture_size) + sx;
+                                                        let color = tex.pixels[index];
+
+                                                        let i = (y * texture_size) + x;
+                                                        pixels[i] = color;
+                                                    }
+                                                }
+
+                                                let downsized_texture = ColorImage {
+                                                    size: [texture_size, texture_size],
+                                                    pixels,
+                                                };
+
+                                                e.insert(downsized_texture);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Assigns landscape_records, dimensions and pixels
@@ -122,7 +236,9 @@ impl TemplateApp {
             EBackground::None => None,
             EBackground::Landscape => {
                 let max_texture_side = ctx.input(|i| i.max_texture_side);
-                Some(self.get_landscape_image(max_texture_side))
+                self.populate_texture_map(max_texture_side);
+
+                Some(self.get_landscape_image())
             }
             EBackground::HeightMap => Some(self.get_heightmap_image()),
             EBackground::GameMap => Some(self.get_gamemap_image()),
@@ -150,38 +266,15 @@ impl TemplateApp {
         generate_map(&self.dimensions, &self.land_records)
     }
 
-    pub fn get_landscape_image(&mut self, max_texture_side: usize) -> ColorImage {
+    pub fn get_landscape_image(&mut self) -> ColorImage {
         // glow supports textures up to this
         let dimensions = &mut self.dimensions;
-        let size_tuple = dimensions.pixel_size_tuple(dimensions.cell_size());
-        let width = size_tuple[0];
-        let height = size_tuple[1];
-        if width > max_texture_side || height > max_texture_side {
-            error!(
-                "Texture size too large: (width: {}, height: {}), supported side: {}",
-                width, height, max_texture_side
-            );
-
-            debug!("cell size {}", dimensions.cell_size());
-            debug!("texture_size {}", dimensions.texture_size);
-            debug!("Resetting texture size to 16");
-
-            dimensions.texture_size = 16;
-
-            // rfd messagebox
-            rfd::MessageDialog::new()
-                .set_title("Error")
-                .set_description("Texture size too large, resetting to 16")
-                .set_buttons(rfd::MessageButtons::Ok)
-                .show();
-        }
 
         if let Some(i) = compute_landscape_image(
             dimensions,
             &self.land_records,
-            &self.ltex_records,
-            &self.data_files,
             &self.heights,
+            &self.texture_map,
         ) {
             i
         } else {

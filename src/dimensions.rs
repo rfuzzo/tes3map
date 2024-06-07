@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use egui::Pos2;
 
 use crate::{CellKey, GRID_SIZE};
@@ -53,6 +55,17 @@ impl Dimensions {
             self.width() * pixel_per_cell,
             self.height() * pixel_per_cell,
         ]
+    }
+
+    pub fn get_max_texture_resolution(&self, max_texture_side: usize) -> usize {
+        max_texture_side / (GRID_SIZE * max(self.width(), self.height()))
+    }
+
+    pub fn pixel_width(&self) -> usize {
+        self.width() * self.cell_size()
+    }
+    pub fn pixel_hieght(&self) -> usize {
+        self.height() * self.cell_size()
     }
 
     pub fn tranform_to_cell_x(&self, x: i32) -> i32 {

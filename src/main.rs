@@ -7,10 +7,10 @@ const NAME: &str = env!("CARGO_PKG_NAME");
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
-    use log::{warn, LevelFilter};
+    use log::{LevelFilter, warn};
 
     let log_path = format!("{}.log", NAME);
-    let log_level = LevelFilter::Info;
+    let log_level = LevelFilter::Debug;
     let _ = simple_logging::log_to_file(log_path, log_level);
     warn!("{} v{}", NAME, VERSION);
 

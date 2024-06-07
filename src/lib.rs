@@ -98,6 +98,8 @@ pub struct SavedData {
 
     pub show_tooltips: bool,
 
+    pub realtime_update: bool,
+
     // settings
     pub landscape_settings: LandscapeSettings,
     pub heightmap_settings: HeightmapSettings,

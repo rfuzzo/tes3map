@@ -71,28 +71,30 @@ impl TemplateApp {
         ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");
 
         // settings
-        ui.separator();
-        ui.horizontal(|ui| {
-            // if reset then also refresh
-            if ui.button("Reset").clicked() {
-                // background settings
-                if self.ui_data.background == EBackground::Landscape {
-                    self.ui_data.landscape_settings = LandscapeSettings::default();
-                } else if self.ui_data.background == EBackground::HeightMap {
-                    self.ui_data.heightmap_settings = HeightmapSettings::default();
+        if self.background_handle.is_some() {
+            ui.separator();
+            ui.horizontal(|ui| {
+                // if reset then also refresh
+                if ui.button("Reset").clicked() {
+                    // background settings
+                    if self.ui_data.background == EBackground::Landscape {
+                        self.ui_data.landscape_settings = LandscapeSettings::default();
+                    } else if self.ui_data.background == EBackground::HeightMap {
+                        self.ui_data.heightmap_settings = HeightmapSettings::default();
+                    }
+
+                    self.reload_background(ctx, None, false, false);
                 }
 
-                self.reload_background(ctx, None, false, false);
-            }
+                if ui.button("Refresh").clicked() {
+                    self.reload_background(ctx, None, true, false);
 
-            // if ui.button("Refresh image").clicked() {
-            //     self.reload_background(ctx, None, false, false);
-            //
-            //     if self.ui_data.overlay_paths {
-            //         self.reload_paths(ctx, true);
-            //     }
-            // }
-        });
+                    if self.ui_data.overlay_paths {
+                        self.reload_paths(ctx);
+                    }
+                }
+            });
+        }
 
         // background settings
         if self.ui_data.background == EBackground::Landscape {
@@ -111,15 +113,25 @@ impl TemplateApp {
         ui.label("Reset: middle mouse button");
     }
 
-    fn landscape_settings_ui(&mut self, ui: &mut Ui, _ctx: &egui::Context) {
+    fn landscape_settings_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {
         let settings = &mut self.ui_data.landscape_settings;
         ui.label("Landscape settings");
-        ui.add(egui::Slider::new(&mut settings.texture_size, 2..=200).text("Texture Resolution"));
+
+        let max_texture_side = ctx.input(|i| i.max_texture_side);
+        let max_texture_resolution = self.dimensions.get_max_texture_resolution(max_texture_side);
+
+        ui.add(
+            egui::Slider::new(&mut settings.texture_size, 2..=max_texture_resolution)
+                .text("Texture Resolution"),
+        );
     }
 
     fn heightmap_settings_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {
         let settings = &mut self.ui_data.heightmap_settings;
         ui.label("Heightmap settings");
+
+        ui.checkbox(&mut self.ui_data.realtime_update, "Realtime update");
+
         let mut changed = false;
         if ui
             .color_edit_button_srgba(&mut settings.height_base)
@@ -147,7 +159,7 @@ impl TemplateApp {
             changed = true;
         }
 
-        if changed {
+        if changed && self.ui_data.realtime_update {
             // reload background
             self.reload_background(ctx, None, false, false);
         }
