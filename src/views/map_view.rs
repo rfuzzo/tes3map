@@ -2,7 +2,7 @@ use eframe::emath::{pos2, Pos2, Rect, RectTransform};
 use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
 
-use crate::{CellKey, EBackground, height_from_screen_space, save_image, TemplateApp, VERTEX_CNT};
+use crate::{CellKey, EBackground, GRID_SIZE, height_from_screen_space, save_image, TemplateApp, VERTEX_CNT};
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::conflicts::get_conflict_shapes;
@@ -82,9 +82,8 @@ impl TemplateApp {
         // zoomed and panned canvas
 
         // transforms
-        let pixel_width = self.dimensions.width() as f32 * self.dimensions.cell_size() as f32;
-        let pixel_height = self.dimensions.height() as f32 * self.dimensions.cell_size() as f32;
-
+        let pixel_width = self.dimensions.pixel_width() as f32;
+        let pixel_height = self.dimensions.pixel_height() as f32;
         let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
 
         let min = self.zoom_data.drag_offset;
@@ -154,6 +153,8 @@ impl TemplateApp {
             let key = self.cellkey_from_screen(from_screen, pointer_pos);
             self.runtime_data.hover_pos = key;
 
+           
+
             let mut tooltipinfo = TooltipInfo {
                 key,
                 height: 0.0,
@@ -173,11 +174,15 @@ impl TemplateApp {
             // get height
             if self.ui_data.background == EBackground::HeightMap {
                 let transformed_position = from_screen * pointer_pos;
+                let r = VERTEX_CNT as f32 /(self.dimensions.texture_size as f32 * GRID_SIZE as f32);
+                let x = transformed_position.x as f32 * r;
+                let y = transformed_position.y as f32 * r;
+
                 if let Some(height) = height_from_screen_space(
                     &self.heights,
                     &self.dimensions,
-                    transformed_position.x as usize / VERTEX_CNT,
-                    transformed_position.y as usize / VERTEX_CNT,
+                    x as usize,
+                    y as usize,
                 ) {
                     tooltipinfo.height = height;
                 }

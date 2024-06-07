@@ -48,7 +48,7 @@ impl TemplateApp {
                     clicked = true;
                 }
 
-                if clicked {
+                if clicked && self.background_handle.is_some() {
                     self.reload_background(ctx, None, false, false);
                 }
             });

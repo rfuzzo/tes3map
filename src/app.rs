@@ -102,12 +102,13 @@ impl TemplateApp {
             debug!("Texture resolution is the same, no need to reload");
             return;
         }
-        
+
         // otherwise check if possible
         let width = self.dimensions.pixel_width();
-        let height = self.dimensions.pixel_hieght();
+        let height = self.dimensions.pixel_height();
         if width > max_texture_side || height > max_texture_side {
-            let max_texture_resolution = self.dimensions.get_max_texture_resolution(max_texture_side);
+            let max_texture_resolution =
+                self.dimensions.get_max_texture_resolution(max_texture_side);
 
             error!(
                 "Texture size too large: (width: {}, height: {}), supported side: {}, max_texture_side: {}",
@@ -132,11 +133,11 @@ impl TemplateApp {
                 .set_buttons(rfd::MessageButtons::Ok)
                 .show();
         }
-       
+
         self.texture_map.clear();
         let texture_size = self.dimensions.texture_size;
         self.texture_map_resolution = texture_size;
-        
+
         debug!("Populating texture map with resolution: {}", texture_size);
 
         for cy in self.dimensions.min_y..self.dimensions.max_y + 1 {
@@ -168,8 +169,7 @@ impl TemplateApp {
                                                 // scale texture to fit the texture_size
                                                 let mut pixels = vec![
                                                     Color32::TRANSPARENT;
-                                                    texture_size
-                                                        * texture_size
+                                                    texture_size * texture_size
                                                 ];
 
                                                 // textures per tile

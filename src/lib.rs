@@ -211,17 +211,6 @@ where
     plugins
 }
 
-/// Get the height from the screen space.
-pub fn height_from_screen_space(
-    heights: &[f32],
-    dimensions: &Dimensions,
-    x: usize,
-    y: usize,
-) -> Option<f32> {
-    let i = (y * dimensions.stride(VERTEX_CNT)) + x;
-    heights.get(i).copied()
-}
-
 /// Overlay two colors with alpha.
 fn overlay_colors_with_alpha(color1: Color32, color2: Color32, alpha1: f32) -> Color32 {
     let alpha2 = 1_f32 - alpha1;
@@ -517,6 +506,17 @@ fn height_map_to_pixel_heights(
     }
 
     pixels
+}
+
+/// Get the height from the screen space.
+pub fn height_from_screen_space(
+    heights: &[f32],
+    dimensions: &Dimensions,
+    x: usize,
+    y: usize,
+) -> Option<f32> {
+    let i = (y * dimensions.stride(VERTEX_CNT)) + x;
+    heights.get(i).copied()
 }
 
 //////////////////////////////////////////

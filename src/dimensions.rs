@@ -64,7 +64,7 @@ impl Dimensions {
     pub fn pixel_width(&self) -> usize {
         self.width() * self.cell_size()
     }
-    pub fn pixel_hieght(&self) -> usize {
+    pub fn pixel_height(&self) -> usize {
         self.height() * self.cell_size()
     }
 
