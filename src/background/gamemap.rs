@@ -48,7 +48,7 @@ pub fn generate_map(
 }
 
 /// https://github.com/NullCascade/morrowind-mods/blob/master/User%20Interface%20Expansion/plugin_source/PatchWorldMap.cpp#L158
-pub fn get_map_color(h: f32) -> Color32 {
+fn get_map_color(h: f32) -> Color32 {
     #[derive(Default)]
     struct MyColor {
         pub r: f32,

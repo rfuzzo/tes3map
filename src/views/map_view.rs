@@ -1,6 +1,7 @@
 use eframe::emath::{pos2, Pos2, Rect, RectTransform};
 use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
+use image::{imageops, ImageError};
 use log::info;
 
 use crate::app::TooltipInfo;
@@ -11,7 +12,7 @@ use crate::overlay::paths;
 use crate::overlay::regions::get_region_shapes;
 use crate::overlay::travel::get_travel_shapes;
 use crate::{
-    get_layered_image, height_from_screen_space, save_image, CellKey, EBackground, TemplateApp,
+    color_image_to_dynamic_image, height_from_screen_space, CellKey, EBackground, TemplateApp,
     GRID_SIZE, VERTEX_CNT,
 };
 
@@ -284,7 +285,12 @@ impl TemplateApp {
             ui.separator();
 
             if ui.button("Save as image").clicked() {
-                self.save_image(ctx);
+                match self.save_image(ctx) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        info!("Error saving image: {:?}", e);
+                    }
+                }
 
                 ui.close_menu();
             }
@@ -308,7 +314,7 @@ impl TemplateApp {
         }
     }
 
-    fn save_image(&mut self, ctx: &egui::Context) {
+    fn save_image(&mut self, ctx: &egui::Context) -> Result<(), ImageError> {
         // construct default name from the first plugin name then the background type abbreviated
         let background_name = match self.ui_data.background {
             EBackground::None => "",
@@ -333,49 +339,64 @@ impl TemplateApp {
             .save_file();
 
         if let Some(original_path) = file_option {
-            let mut image = None;
+            let mut background = None;
             match self.ui_data.background {
                 EBackground::None => {}
                 EBackground::Landscape => {
                     let max_texture_side = ctx.input(|i| i.max_texture_side);
                     self.populate_texture_map(max_texture_side);
-                    image = Some(self.get_landscape_image());
+                    background = Some(self.get_landscape_image());
                 }
                 EBackground::HeightMap => {
-                    image = Some(self.get_heightmap_image());
+                    background = Some(self.get_heightmap_image());
                 }
                 EBackground::GameMap => {
-                    image = Some(self.get_gamemap_image());
+                    background = Some(self.get_gamemap_image());
                 }
             }
 
-            if let Some(image) = image {
-                // TODO save shape overlays
-                let size_image = image.size;
-                let paths = paths::get_overlay_path_image(&self.dimensions, &self.land_records);
-                let size_paths = paths.size;
+            if let Some(bg) = background {
+                let mut bg_image = color_image_to_dynamic_image(&bg)?;
 
-                info!("Image size: {:?}", size_image);
-                info!("Paths size: {:?}", size_paths);
+                if self.ui_data.overlay_paths {
+                    let fg = paths::get_overlay_path_image(&self.dimensions, &self.land_records);
+                    let mut fg_image = color_image_to_dynamic_image(&fg)?;
 
-                let msg = match get_layered_image(image, paths) {
-                    Ok(r) => match save_image(&original_path, &r) {
-                        Err(e) => format!("Error saving image: {}", e),
-                        Ok(_) => {
-                            format!("Image saved to: {}", original_path.display())
-                        }
-                    },
-                    Err(err) => {
-                        format!("Error saving image: {:?}", err)
+                    #[allow(clippy::comparison_chain)]
+                    if bg.size < fg.size {
+                        // resize the smaller image to the larger image
+                        bg_image = image::imageops::resize(
+                            &bg_image,
+                            fg.size[0] as u32,
+                            fg.size[1] as u32,
+                            image::imageops::FilterType::CatmullRom,
+                        )
+                        .into();
+                    } else if bg.size > fg.size {
+                        // resize the fg image to the bg image
+                        fg_image = image::imageops::resize(
+                            &fg_image,
+                            bg.size[0] as u32,
+                            bg.size[1] as u32,
+                            image::imageops::FilterType::CatmullRom,
+                        )
+                        .into();
                     }
-                };
+
+                    // overlay the images
+                    imageops::overlay(&mut bg_image, &fg_image, 0, 0);
+                }
+
+                bg_image.save(original_path)?;
 
                 rfd::MessageDialog::new()
                     .set_title("Info")
-                    .set_description(msg)
+                    .set_description("Image saved successfully")
                     .set_buttons(rfd::MessageButtons::Ok)
                     .show();
             }
         }
+
+        Ok(())
     }
 }

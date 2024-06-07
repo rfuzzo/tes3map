@@ -7,7 +7,6 @@ use std::{
 };
 
 use egui::{Color32, ColorImage, Pos2};
-use errors::SizeMismatchError;
 use image::{
     error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
     DynamicImage, ImageError, RgbaImage,
@@ -28,7 +27,6 @@ mod app;
 mod background;
 mod dimensions;
 mod eframe_app;
-mod errors;
 mod overlay;
 mod views;
 
@@ -233,21 +231,7 @@ fn overlay_colors_with_alpha(color1: Color32, color2: Color32, alpha1: f32) -> C
     Color32::from_rgba_premultiplied(r, g, b, 255)
 }
 
-fn overlay_colors(color1: Color32, color2: Color32) -> Color32 {
-    let alpha1 = color1.a() as f32 / 255.0;
-    let alpha2 = color2.a() as f32 / 255.0;
-
-    let r = ((1.0 - alpha2) * (alpha1 * color1.r() as f32 + alpha2 * color2.r() as f32)) as u8;
-    let g = ((1.0 - alpha2) * (alpha1 * color1.g() as f32 + alpha2 * color2.g() as f32)) as u8;
-    let b = ((1.0 - alpha2) * (alpha1 * color1.b() as f32 + alpha2 * color2.b() as f32)) as u8;
-    let a = alpha1 * 255.0; // TODO HACK
-
-    Color32::from_rgba_premultiplied(r, g, b, a as u8)
-}
-
-fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), ImageError> {
-    // get image
-
+fn color_image_to_dynamic_image(color_image: &ColorImage) -> Result<DynamicImage, ImageError> {
     let pixels = color_image.as_raw();
 
     // Create an RgbaImage from the raw pixel data
@@ -257,9 +241,7 @@ fn save_image(path: &Path, color_image: &ColorImage) -> Result<(), ImageError> {
         pixels.to_vec(),
     ) {
         // Convert the RgbaImage to a DynamicImage (required for saving as PNG)
-        let dynamic_img = DynamicImage::ImageRgba8(img);
-        dynamic_img.save(path)?;
-        Ok(())
+        Ok(DynamicImage::ImageRgba8(img))
     } else {
         let e = ImageError::Unsupported(UnsupportedError::from_format_and_kind(
             ImageFormatHint::Name("".to_owned()),
@@ -326,30 +308,6 @@ fn calculate_dimensions(
         min_z: dimensions.min_z,
         max_z: dimensions.max_z,
     }
-}
-
-pub fn get_layered_image(
-    img: ColorImage,
-    img2: ColorImage,
-) -> Result<ColorImage, SizeMismatchError> {
-    if img.size != img2.size {
-        return Err(SizeMismatchError);
-    }
-
-    // base image
-    let mut layered = img.pixels.clone();
-
-    // overlay second image
-    for (i, color1) in img.pixels.into_iter().enumerate() {
-        let color2 = img2.pixels[i];
-        layered[i] = overlay_colors(color1, color2);
-    }
-
-    // create new colorImage
-    Ok(ColorImage {
-        pixels: layered,
-        size: img.size,
-    })
 }
 
 fn load_texture(data_files: &Option<PathBuf>, ltex: &LandscapeTexture) -> Option<ColorImage> {
