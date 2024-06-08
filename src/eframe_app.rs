@@ -1,7 +1,7 @@
 use std::env;
 
-use crate::*;
 use crate::app::ESidePanelView;
+use crate::*;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const NAME: &str = env!("CARGO_PKG_NAME");

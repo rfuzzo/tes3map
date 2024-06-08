@@ -16,10 +16,10 @@ pub struct Dimensions {
 }
 
 impl Dimensions {
-    fn width(&self) -> usize {
+    pub fn width(&self) -> usize {
         (1 + self.max_x - self.min_x).max(0) as usize
     }
-    fn height(&self) -> usize {
+    pub fn height(&self) -> usize {
         (1 + self.max_y - self.min_y).max(0) as usize
     }
     fn size(&self) -> usize {

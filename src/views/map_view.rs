@@ -1,20 +1,15 @@
 use eframe::emath::{pos2, Pos2, Rect, RectTransform};
 use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
-use image::{imageops, ImageError};
 use log::info;
 
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::conflicts::get_conflict_shapes;
 use crate::overlay::grid::get_grid_shapes;
-use crate::overlay::paths;
 use crate::overlay::regions::get_region_shapes;
 use crate::overlay::travel::get_travel_shapes;
-use crate::{
-    color_image_to_dynamic_image, height_from_screen_space, CellKey, EBackground, TemplateApp,
-    GRID_SIZE, VERTEX_CNT,
-};
+use crate::*;
 
 impl TemplateApp {
     fn cellkey_from_screen(&mut self, from_screen: RectTransform, pointer_pos: Pos2) -> CellKey {
@@ -22,14 +17,6 @@ impl TemplateApp {
         // get cell grid
         self.dimensions
             .tranform_to_cell(Pos2::new(transformed_position.x, transformed_position.y))
-    }
-
-    fn get_rect_at_cell(&mut self, to_screen: RectTransform, key: CellKey) -> Rect {
-        let p00x = self.dimensions.tranform_to_canvas_x(key.0);
-        let p00y = self.dimensions.tranform_to_canvas_y(key.1);
-        let p00 = Pos2::new(p00x as f32, p00y as f32);
-        let p11 = Pos2::new((p00x + 1) as f32, (p00y + 1) as f32);
-        Rect::from_two_pos(to_screen * p00, to_screen * p11)
     }
 
     pub fn map_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -87,10 +74,10 @@ impl TemplateApp {
         // zoomed and panned canvas
 
         // transforms
-        let pixel_width = self.dimensions.pixel_width(1) as f32;
-        let pixel_height = self.dimensions.pixel_height(1) as f32;
-        let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(pixel_width, pixel_height));
-        let r = pixel_height / pixel_width;
+        let real_width = self.dimensions.width() as f32;
+        let real_height = self.dimensions.height() as f32;
+        let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(real_width, real_height));
+        let r = real_height / real_width;
 
         let min = self.zoom_data.drag_offset;
         let max = Pos2::new(response.rect.max.x, response.rect.max.x * r) * self.zoom_data.zoom
@@ -143,7 +130,7 @@ impl TemplateApp {
 
         // overlay selected cell
         if let Some(key) = self.runtime_data.selected_id {
-            let rect = self.get_rect_at_cell(to_screen, key);
+            let rect = get_rect_at_cell(&self.dimensions, to_screen, key);
             let shape =
                 Shape::rect_stroke(rect, Rounding::default(), Stroke::new(4.0, Color32::RED));
             painter.add(shape);
@@ -312,91 +299,5 @@ impl TemplateApp {
                 }
             }
         }
-    }
-
-    fn save_image(&mut self, ctx: &egui::Context) -> Result<(), ImageError> {
-        // construct default name from the first plugin name then the background type abbreviated
-        let background_name = match self.ui_data.background {
-            EBackground::None => "",
-            EBackground::Landscape => "l",
-            EBackground::HeightMap => "h",
-            EBackground::GameMap => "g",
-        };
-        let first_plugin = self
-            .plugins
-            .as_ref()
-            .unwrap()
-            .iter()
-            .filter(|p| p.enabled)
-            .nth(0)
-            .unwrap();
-        let plugin_name = first_plugin.get_name();
-        let defaultname = format!("{}_{}.png", plugin_name, background_name);
-
-        let file_option = rfd::FileDialog::new()
-            .add_filter("png", &["png"])
-            .set_file_name(defaultname)
-            .save_file();
-
-        if let Some(original_path) = file_option {
-            let mut background = None;
-            match self.ui_data.background {
-                EBackground::None => {}
-                EBackground::Landscape => {
-                    let max_texture_side = ctx.input(|i| i.max_texture_side);
-                    self.populate_texture_map(max_texture_side);
-                    background = Some(self.get_landscape_image());
-                }
-                EBackground::HeightMap => {
-                    background = Some(self.get_heightmap_image());
-                }
-                EBackground::GameMap => {
-                    background = Some(self.get_gamemap_image());
-                }
-            }
-
-            if let Some(bg) = background {
-                let mut bg_image = color_image_to_dynamic_image(&bg)?;
-
-                if self.ui_data.overlay_paths {
-                    let fg = paths::get_overlay_path_image(&self.dimensions, &self.land_records);
-                    let mut fg_image = color_image_to_dynamic_image(&fg)?;
-
-                    #[allow(clippy::comparison_chain)]
-                    if bg.size < fg.size {
-                        // resize the smaller image to the larger image
-                        bg_image = image::imageops::resize(
-                            &bg_image,
-                            fg.size[0] as u32,
-                            fg.size[1] as u32,
-                            image::imageops::FilterType::CatmullRom,
-                        )
-                        .into();
-                    } else if bg.size > fg.size {
-                        // resize the fg image to the bg image
-                        fg_image = image::imageops::resize(
-                            &fg_image,
-                            bg.size[0] as u32,
-                            bg.size[1] as u32,
-                            image::imageops::FilterType::CatmullRom,
-                        )
-                        .into();
-                    }
-
-                    // overlay the images
-                    imageops::overlay(&mut bg_image, &fg_image, 0, 0);
-                }
-
-                bg_image.save(original_path)?;
-
-                rfd::MessageDialog::new()
-                    .set_title("Info")
-                    .set_description("Image saved successfully")
-                    .set_buttons(rfd::MessageButtons::Ok)
-                    .show();
-            }
-        }
-
-        Ok(())
     }
 }

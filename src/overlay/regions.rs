@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use egui::{emath::RectTransform, Color32, Pos2, Rect, Rounding, Shape};
+use egui::{emath::RectTransform, Color32, Rounding, Shape};
 use tes3::esp::{Cell, Region};
 
-use crate::{dimensions::Dimensions, CellKey};
+use crate::{dimensions::Dimensions, get_rect_at_cell, CellKey};
 
 pub fn get_region_shapes(
     to_screen: RectTransform,
@@ -28,15 +28,7 @@ pub fn get_region_shapes(
                             region.map_color[2],
                         );
 
-                        let p00x = dimensions.tranform_to_canvas_x(cx);
-                        let p00y = dimensions.tranform_to_canvas_y(cy);
-                        let p00 = Pos2::new(p00x as f32, p00y as f32);
-
-                        let p11x = p00x + 1;
-                        let p11y = p00y + 1;
-                        let p11 = Pos2::new(p11x as f32, p11y as f32);
-
-                        let rect = Rect::from_two_pos(to_screen * p00, to_screen * p11);
+                        let rect = get_rect_at_cell(dimensions, to_screen, key);
                         let shape = Shape::rect_filled(rect, Rounding::default(), region_color);
                         shapes.push(shape);
                     }

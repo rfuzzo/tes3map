@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use egui::{Color32, ColorImage, Pos2};
+use egui::{emath::RectTransform, Color32, ColorImage, Pos2, Rect};
 use image::{
     error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
     DynamicImage, ImageError, RgbaImage,
@@ -518,6 +518,12 @@ pub fn height_from_screen_space(
 ) -> Option<f32> {
     let i = (y * dimensions.stride(VERTEX_CNT)) + x;
     heights.get(i).copied()
+}
+
+fn get_rect_at_cell(dimensions: &Dimensions, to_screen: RectTransform, key: CellKey) -> Rect {
+    let p00 = dimensions.tranform_to_canvas(key);
+    let p11 = Pos2::new(p00.x + 1.0, p00.y + 1.0);
+    Rect::from_two_pos(to_screen * p00, to_screen * p11)
 }
 
 //////////////////////////////////////////
