@@ -5,8 +5,8 @@ use log::info;
 use tes3::esp::{Landscape, LandscapeFlags, LandscapeTexture};
 
 use crate::{
-    height_from_screen_space, overlay_colors_with_alpha, CellKey, Dimensions, LandscapeSettings,
-    DEFAULT_COLOR, GRID_SIZE, VERTEX_CNT,
+    height_from_screen_space, overlay_colors_with_alpha, CellKey, Dimensions, ImageBuffer,
+    LandscapeSettings, DEFAULT_COLOR, GRID_SIZE, VERTEX_CNT,
 };
 
 /// Compute a landscape image from the given landscape records and texture map.
@@ -16,7 +16,7 @@ pub fn compute_landscape_image(
     landscape_records: &HashMap<CellKey, Landscape>,
     ltex_records: &HashMap<u32, LandscapeTexture>,
     heights: &[f32],
-    texture_map: &HashMap<String, ColorImage>,
+    texture_map: &HashMap<String, ImageBuffer>,
 ) -> ColorImage {
     let d = dimensions;
     let texture_size = settings.texture_size;
@@ -58,8 +58,12 @@ pub fn compute_landscape_image(
                                 if let Some(texture) = texture_map.get(&texture_name) {
                                     for x in 0..texture_size {
                                         for y in 0..texture_size {
-                                            let index = (y * texture_size) + x;
-                                            let mut color = texture.pixels[index];
+                                            // let index = (y * texture_size) + x;
+                                            // let mut color = texture.pixels[index];
+                                            let pixel = texture.get_pixel(x as u32, y as u32);
+                                            let mut color = Color32::from_rgba_premultiplied(
+                                                pixel[0], pixel[1], pixel[2], pixel[3],
+                                            );
 
                                             let tx = d.tranform_to_canvas_x(cx) * cell_size
                                                 + gx * texture_size

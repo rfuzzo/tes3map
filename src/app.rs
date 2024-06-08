@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use egui::{Color32, ColorImage, Pos2};
+use egui::{ColorImage, Pos2};
 use log::{debug, error};
 use overlay::paths::get_overlay_path_image;
 use tes3::esp::{Landscape, Region};
@@ -68,7 +68,7 @@ pub struct TemplateApp {
     #[serde(skip)]
     pub texture_map_resolution: usize,
     #[serde(skip)]
-    pub texture_map: HashMap<String, ColorImage>,
+    pub texture_map: HashMap<String, ImageBuffer>,
 
     // runtime data
     #[serde(skip)]
@@ -167,37 +167,22 @@ impl TemplateApp {
                                             continue;
                                         }
 
-                                        if let Some(tex) = load_texture(&self.data_files, ltex) {
-                                            // transform texture and downsize
+                                        if let Ok(tex) = load_texture(&self.data_files, ltex) {
+                                            // resize the image
+                                            let image = image::imageops::resize(
+                                                &tex,
+                                                texture_size as u32,
+                                                texture_size as u32,
+                                                image::imageops::FilterType::CatmullRom,
+                                            );
 
-                                            // scale texture to fit the texture_size
-                                            let mut pixels = vec![
-                                                Color32::TRANSPARENT;
-                                                texture_size * texture_size
-                                            ];
-
-                                            // textures per tile
-                                            for x in 0..texture_size {
-                                                for y in 0..texture_size {
-                                                    // pick every nth pixel from the texture to downsize
-                                                    let sx = x * (TEXTURE_MAX_SIZE / texture_size);
-                                                    let sy = y * (TEXTURE_MAX_SIZE / texture_size);
-                                                    let index = (sy * texture_size) + sx;
-                                                    let color = tex.pixels[index];
-
-                                                    let i = (y * texture_size) + x;
-                                                    pixels[i] = color;
-                                                }
-                                            }
-
-                                            let downsized_texture = ColorImage {
-                                                size: [texture_size, texture_size],
-                                                pixels,
-                                            };
+                                            // let size = [image.width() as _, image.height() as _];
+                                            // let image_buffer = image.to_rgba8();
+                                            // let pixels = image_buffer.as_flat_samples();
+                                            // return Some(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()));
 
                                             info!("Loaded texture: {}", ltex.file_name);
-                                            self.texture_map
-                                                .insert(texture_name, downsized_texture);
+                                            self.texture_map.insert(texture_name, image);
                                         } else {
                                             error!("Failed to load texture: {}", ltex.file_name);
                                         }

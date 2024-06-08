@@ -30,12 +30,12 @@ mod eframe_app;
 mod overlay;
 mod views;
 
-const TEXTURE_MAX_SIZE: usize = 256;
 const GRID_SIZE: usize = 16;
 const VERTEX_CNT: usize = 65;
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
 
 type CellKey = (i32, i32);
+type ImageBuffer = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum EBackground {
@@ -310,8 +310,20 @@ fn calculate_dimensions(
     }
 }
 
-fn load_texture(data_files: &Option<PathBuf>, ltex: &LandscapeTexture) -> Option<ColorImage> {
-    let data_files = data_files.as_ref()?;
+fn load_texture(
+    data_files: &Option<PathBuf>,
+    ltex: &LandscapeTexture,
+) -> Result<DynamicImage, ImageError> {
+    let data_files = match data_files {
+        Some(p) => p,
+        None => {
+            warn!("Data files not found");
+            return Err(ImageError::IoError(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Data files not found",
+            )));
+        }
+    };
 
     let _tex_path = data_files.join("Textures").join(ltex.file_name.clone());
 
@@ -320,54 +332,50 @@ fn load_texture(data_files: &Option<PathBuf>, ltex: &LandscapeTexture) -> Option
     let bmp_path = _tex_path.with_extension("bmp");
 
     if !tga_path.exists() && !dds_path.exists() && !bmp_path.exists() {
-        warn!("Texture not found: {:?}", _tex_path);
-        return None;
+        return Err(ImageError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Texture not found",
+        )));
     }
 
     // decode image
-    if let Some(value) = decode_image(dds_path) {
-        return Some(value);
+    if dds_path.exists() {
+        decode_image(dds_path)
+    } else if tga_path.exists() {
+        decode_image(tga_path)
+    } else if bmp_path.exists() {
+        decode_image(bmp_path)
+    } else {
+        Err(ImageError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Texture not found",
+        )))
     }
-    if let Some(value) = decode_image(tga_path) {
-        return Some(value);
-    }
-    if let Some(value) = decode_image(bmp_path) {
-        return Some(value);
-    }
-
-    None
 }
 
-fn decode_image(tex_path: PathBuf) -> Option<ColorImage> {
-    if let Ok(mut reader) = image::io::Reader::open(&tex_path) {
-        let ext = tex_path
-            .extension()
-            .unwrap()
-            .to_string_lossy()
-            .to_lowercase();
-        if ext.contains("tga") {
-            reader.set_format(image::ImageFormat::Tga);
-        } else if ext.contains("dds") {
-            reader.set_format(image::ImageFormat::Dds);
-        } else if ext.contains("bmp") {
-            reader.set_format(image::ImageFormat::Bmp);
-        } else {
-            // not supported
-            warn!("Texture format not supported: {:?}", tex_path);
-            return None;
-        }
-
-        let Ok(image) = reader.decode() else {
-            log::error!("Error decoding texture: {:?}", tex_path);
-            return None;
-        };
-
-        let size = [image.width() as _, image.height() as _];
-        let image_buffer = image.to_rgba8();
-        let pixels = image_buffer.as_flat_samples();
-        return Some(ColorImage::from_rgba_unmultiplied(size, pixels.as_slice()));
+fn decode_image(tex_path: PathBuf) -> Result<DynamicImage, ImageError> {
+    let mut reader = image::io::Reader::open(&tex_path)?;
+    let ext = tex_path
+        .extension()
+        .unwrap()
+        .to_string_lossy()
+        .to_lowercase();
+    if ext.contains("tga") {
+        reader.set_format(image::ImageFormat::Tga);
+    } else if ext.contains("dds") {
+        reader.set_format(image::ImageFormat::Dds);
+    } else if ext.contains("bmp") {
+        reader.set_format(image::ImageFormat::Bmp);
+    } else {
+        return Err(ImageError::Unsupported(
+            UnsupportedError::from_format_and_kind(
+                ImageFormatHint::Name(ext.clone()),
+                UnsupportedErrorKind::Format(ImageFormatHint::Name(ext)),
+            ),
+        ));
     }
-    None
+
+    reader.decode()
 }
 
 pub fn get_cell_name(cells: &HashMap<CellKey, Cell>, pos: CellKey) -> String {
