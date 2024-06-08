@@ -371,8 +371,6 @@ impl TemplateApp {
 
                     let canvas_width = bg_image.width() as f32;
                     let canvas_height = bg_image.height() as f32;
-                    //let r = real_height / real_width;
-                    //let canvas_height = r * canvas_width as f32;
                     let transform = RectTransform::from_to(
                         from,
                         Rect::from_min_max(pos2(0.0, 0.0), pos2(canvas_width, canvas_height)),
@@ -440,9 +438,9 @@ impl TemplateApp {
                                         rect.height() as u32,
                                         |x, y| {
                                             if x < stroke_width as u32
-                                                || x >= rect.width() as u32 - stroke_width as u32
+                                                || x > (rect.width() - stroke_width) as u32
                                                 || y < stroke_width as u32
-                                                || y >= rect.height() as u32 - stroke_width as u32
+                                                || y > (rect.height() - stroke_width) as u32
                                             {
                                                 image::Rgba([
                                                     color.r(),
