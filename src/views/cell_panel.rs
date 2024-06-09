@@ -47,42 +47,46 @@ impl TemplateApp {
                         continue;
                     }
 
-                    if let Some(selected_key) = self.runtime_data.selected_id {
-                        if selected_key == *key {
-                            ui.visuals_mut().override_text_color = Some(egui::Color32::RED);
-                        } else {
-                            ui.visuals_mut().override_text_color = None;
-                        }
+                    if self.runtime_data.selected_ids.contains(key) {
+                        ui.visuals_mut().override_text_color = Some(egui::Color32::RED);
+                    } else {
+                        ui.visuals_mut().override_text_color = None;
                     }
 
                     let label = egui::Label::new(label_text).sense(egui::Sense::click());
                     let response = ui.add(label);
+
+                    // if cell is clicked, select only that cell
                     if response.clicked() {
-                        self.runtime_data.selected_id = Some(*key);
+                        self.runtime_data.selected_ids = vec![*key];
                     }
                 }
             });
     }
 
     pub fn paint_cell(&mut self, ctx: &Context) {
-        if let Some(cell_key) = self.runtime_data.selected_id {
-            let x = cell_key.0;
-            let y = cell_key.1;
+        // get min and max dimensions of selected cells
+        let selected_cell_ids = self.runtime_data.selected_ids.clone();
 
-            let dimensions = Dimensions {
-                min_x: x,
-                min_y: y,
-                max_x: x,
-                max_y: y,
-                min_z: 0.0,
-                max_z: 0.0,
-            };
+        // get min and max dimensions of selected cells
+        let min_x = selected_cell_ids.iter().map(|k| k.0).min().unwrap();
+        let min_y = selected_cell_ids.iter().map(|k| k.1).min().unwrap();
+        let max_x = selected_cell_ids.iter().map(|k| k.0).max().unwrap();
+        let max_y = selected_cell_ids.iter().map(|k| k.1).max().unwrap();
 
-            let max_texture_side = ctx.input(|i| i.max_texture_side);
-            let max_texture_resolution = dimensions.get_max_texture_resolution(max_texture_side);
-            self.ui_data.landscape_settings.texture_size = max_texture_resolution;
+        let dimensions = Dimensions {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+            min_z: 0.0,
+            max_z: 0.0,
+        };
 
-            self.reload_background(ctx, Some(dimensions), true, true);
-        }
+        let max_texture_side = ctx.input(|i| i.max_texture_side);
+        let max_texture_resolution = dimensions.get_max_texture_resolution(max_texture_side);
+        self.ui_data.landscape_settings.texture_size = max_texture_resolution;
+
+        self.reload_background(ctx, Some(dimensions), true, true);
     }
 }

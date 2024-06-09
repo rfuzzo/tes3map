@@ -129,8 +129,8 @@ impl TemplateApp {
         }
 
         // overlay selected cell
-        if let Some(key) = self.runtime_data.selected_id {
-            let rect = get_rect_at_cell(&self.dimensions, to_screen, key);
+        for key in &self.runtime_data.selected_ids {
+            let rect = get_rect_at_cell(&self.dimensions, to_screen, *key);
             let shape =
                 Shape::rect_stroke(rect, Rounding::default(), Stroke::new(4.0, Color32::RED));
             painter.add(shape);
@@ -290,11 +290,66 @@ impl TemplateApp {
                 let key = self.cellkey_from_screen(from_screen, interact_pos);
                 if self.cell_records.contains_key(&key) {
                     // toggle selection
-                    if self.runtime_data.selected_id == Some(key) {
-                        // toggle off if the same cell is clicked
-                        self.runtime_data.selected_id = None;
+                    // TODO modifiers for multiple selection
+                    if ui.ctx().input(|i| i.modifiers.ctrl) {
+                        // toggle and add to selection
+                        if self.runtime_data.selected_ids.contains(&key) {
+                            self.runtime_data.selected_ids.retain(|&x| x != key);
+                        } else {
+                            self.runtime_data.selected_ids.push(key);
+                        }
+                    } else if ui.ctx().input(|i| i.modifiers.shift) {
+                        // shift selects all cells between the last selected cell and the current cell
+                        if !self.runtime_data.selected_ids.is_empty() {
+                            let minx = self
+                                .runtime_data
+                                .selected_ids
+                                .iter()
+                                .map(|x| x.0)
+                                .min()
+                                .unwrap();
+                            let maxy = self
+                                .runtime_data
+                                .selected_ids
+                                .iter()
+                                .map(|x| x.1)
+                                .max()
+                                .unwrap();
+
+                            let old = (minx, maxy);
+                            let new = key;
+
+                            // add all keys between start and end
+                            let min_y;
+                            let max_y;
+                            let min_x;
+                            let max_x;
+
+                            min_x = old.0.min(new.0);
+                            max_x = old.0.max(new.0);
+
+                            min_y = old.1.min(new.1);
+                            max_y = old.1.max(new.1);
+
+                            let mut keys = Vec::<CellKey>::new();
+                            for x in min_x..=max_x {
+                                for y in min_y..=max_y {
+                                    keys.push((x, y));
+                                }
+                            }
+
+                            self.runtime_data.selected_ids = keys;
+                        } else {
+                            self.runtime_data.selected_ids = vec![key];
+                        }
                     } else {
-                        self.runtime_data.selected_id = Some(key);
+                        #[allow(clippy::collapsible_else_if)]
+                        if self.runtime_data.selected_ids.contains(&key) {
+                            // toggle off if the same cell is clicked
+                            self.runtime_data.selected_ids = Vec::new();
+                        } else {
+                            self.runtime_data.selected_ids = vec![key];
+                        }
                     }
                 }
             }
