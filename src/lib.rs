@@ -123,6 +123,7 @@ pub struct RuntimeData {
     pub info: TooltipInfo,
 
     pub selected_ids: Vec<CellKey>,
+    pub pivot_id: Option<CellKey>,
     pub hover_pos: CellKey,
 }
 

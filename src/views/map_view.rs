@@ -135,6 +135,15 @@ impl TemplateApp {
                 Shape::rect_stroke(rect, Rounding::default(), Stroke::new(4.0, Color32::RED));
             painter.add(shape);
         }
+        if let Some(pivot_id) = self.runtime_data.pivot_id {
+            let rect = get_rect_at_cell(&self.dimensions, to_screen, pivot_id);
+            let shape = Shape::rect_stroke(
+                rect,
+                Rounding::default(),
+                Stroke::new(4.0, Color32::LIGHT_BLUE),
+            );
+            painter.add(shape);
+        }
 
         // Responses
 
@@ -290,9 +299,9 @@ impl TemplateApp {
                 let key = self.cellkey_from_screen(from_screen, interact_pos);
                 if self.cell_records.contains_key(&key) {
                     // toggle selection
-                    // TODO modifiers for multiple selection
                     if ui.ctx().input(|i| i.modifiers.ctrl) {
                         // toggle and add to selection
+                        self.runtime_data.pivot_id = None;
                         if self.runtime_data.selected_ids.contains(&key) {
                             self.runtime_data.selected_ids.retain(|&x| x != key);
                         } else {
@@ -301,37 +310,28 @@ impl TemplateApp {
                     } else if ui.ctx().input(|i| i.modifiers.shift) {
                         // shift selects all cells between the last selected cell and the current cell
                         if !self.runtime_data.selected_ids.is_empty() {
-                            let minx = self
-                                .runtime_data
-                                .selected_ids
-                                .iter()
-                                .map(|x| x.0)
-                                .min()
-                                .unwrap();
-                            let maxy = self
-                                .runtime_data
-                                .selected_ids
-                                .iter()
-                                .map(|x| x.1)
-                                .max()
-                                .unwrap();
+                            // x check. check if
 
-                            let old = (minx, maxy);
-                            let new = key;
+                            let start = if self.runtime_data.selected_ids.len() == 1 {
+                                self.runtime_data.selected_ids[0]
+                            } else if self.runtime_data.pivot_id.is_some() {
+                                self.runtime_data.pivot_id.unwrap()
+                            } else {
+                                *self.runtime_data.selected_ids.last().unwrap()
+                            };
+                            self.runtime_data.pivot_id = Some(start);
+                            let end = key;
 
                             // add all keys between start and end
-                            let min_y;
-                            let max_y;
-                            let min_x;
-                            let max_x;
 
-                            min_x = old.0.min(new.0);
-                            max_x = old.0.max(new.0);
+                            let min_x = start.0.min(end.0);
+                            let max_x = start.0.max(end.0);
 
-                            min_y = old.1.min(new.1);
-                            max_y = old.1.max(new.1);
+                            let min_y = start.1.min(end.1);
+                            let max_y = start.1.max(end.1);
 
                             let mut keys = Vec::<CellKey>::new();
+
                             for x in min_x..=max_x {
                                 for y in min_y..=max_y {
                                     keys.push((x, y));
@@ -341,14 +341,17 @@ impl TemplateApp {
                             self.runtime_data.selected_ids = keys;
                         } else {
                             self.runtime_data.selected_ids = vec![key];
+                            self.runtime_data.pivot_id = Some(key);
                         }
                     } else {
                         #[allow(clippy::collapsible_else_if)]
                         if self.runtime_data.selected_ids.contains(&key) {
                             // toggle off if the same cell is clicked
                             self.runtime_data.selected_ids = Vec::new();
+                            self.runtime_data.pivot_id = None;
                         } else {
                             self.runtime_data.selected_ids = vec![key];
+                            self.runtime_data.pivot_id = Some(key);
                         }
                     }
                 }
