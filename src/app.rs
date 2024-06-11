@@ -1,16 +1,16 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use egui::{pos2, ColorImage, Pos2, Shape};
-use image::{imageops, ImageError};
+use egui::{ColorImage, pos2, Pos2, Shape};
+use image::{ImageError, imageops};
 use log::{debug, error};
-use overlay::{
-    paths::{self, get_overlay_path_image},
-    regions::get_region_shapes,
-};
 use tes3::esp::{Landscape, Region};
 
 use background::{
     gamemap::generate_map, heightmap::generate_heightmap, landscape::compute_landscape_image,
+};
+use overlay::{
+    paths::{self, get_overlay_path_image},
+    regions::get_region_shapes,
 };
 
 use crate::*;
@@ -29,6 +29,7 @@ pub struct TooltipInfo {
     pub region: String,
     pub cell_name: String,
     pub conflicts: Vec<u64>,
+    pub debug: String,
 }
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -276,10 +277,6 @@ impl TemplateApp {
         self.zoom_data.drag_delta = None;
         self.zoom_data.drag_offset = Pos2::default();
         self.zoom_data.drag_start = Pos2::default();
-    }
-
-    pub(crate) fn texture_size(&self) -> f32 {
-        self.ui_data.landscape_settings.texture_size as f32
     }
 
     pub fn save_image(&mut self, ctx: &egui::Context) -> Result<(), ImageError> {

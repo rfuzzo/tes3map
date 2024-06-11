@@ -3,13 +3,13 @@ use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
 use log::info;
 
+use crate::*;
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::conflicts::get_conflict_shapes;
 use crate::overlay::grid::get_grid_shapes;
 use crate::overlay::regions::get_region_shapes;
 use crate::overlay::travel::get_travel_shapes;
-use crate::*;
 
 impl TemplateApp {
     fn cellkey_from_screen(&mut self, from_screen: RectTransform, pointer_pos: Pos2) -> CellKey {
@@ -62,16 +62,12 @@ impl TemplateApp {
             if current_zoom > 0.0 {
                 self.zoom_data.zoom = current_zoom;
 
-                // TODO offset the image for smooth zoom
                 if let Some(pointer_pos) = response.hover_pos() {
                     let d = pointer_pos * r;
                     self.zoom_data.drag_offset -= d.to_vec2();
                 }
             }
         }
-
-        // TODO cut off pan at (0,0)
-        // zoomed and panned canvas
 
         // transforms
         let real_width = self.dimensions.width() as f32;
@@ -158,6 +154,7 @@ impl TemplateApp {
                 region: String::new(),
                 cell_name: String::new(),
                 conflicts: Vec::new(),
+                debug: String::new(),
             };
 
             // get cell
@@ -171,16 +168,14 @@ impl TemplateApp {
             // get height
             if self.ui_data.background == EBackground::HeightMap {
                 let transformed_position = from_screen * pointer_pos;
-                let r = VERTEX_CNT as f32 / (self.texture_size() * GRID_SIZE as f32);
-                let x = transformed_position.x as f32 * r;
-                let y = transformed_position.y as f32 * r;
+                tooltipinfo.debug = format!("{:?}", transformed_position);
 
-                if let Some(height) = height_from_screen_space(
-                    &self.heights,
-                    &self.dimensions,
-                    x as usize,
-                    y as usize,
-                ) {
+                let x = transformed_position.x * VERTEX_CNT as f32;
+                let y = transformed_position.y * VERTEX_CNT as f32;
+
+                if let Some(height) =
+                    height_from_screen_space(&self.heights, &self.dimensions, x   as usize, y  as usize)
+                {
                     tooltipinfo.height = height;
                 }
             }
@@ -199,6 +194,11 @@ impl TemplateApp {
                     let info = self.runtime_data.info.clone();
                     ui.label(format!("{:?} - {}", info.key, info.cell_name));
                     ui.label(format!("Region: {}", info.region));
+
+                    // in debug mode, show the transformed position
+                    if cfg!(debug_assertions) {
+                        ui.label(format!("Debug: {}", info.debug));
+                    }
 
                     // only show if current background is heightmap
                     if self.ui_data.background == EBackground::HeightMap {

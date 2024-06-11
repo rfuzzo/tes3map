@@ -1,4 +1,5 @@
 use egui::Context;
+use tes3::esp::EditorId;
 
 use crate::dimensions::Dimensions;
 use crate::TemplateApp;
@@ -37,7 +38,7 @@ impl TemplateApp {
 
                 for key in ids {
                     // upper and lowercase search
-                    let cell_name = self.cell_records.get(key).unwrap().name.clone();
+                    let cell_name = self.cell_records.get(key).unwrap().editor_id();
                     let label_text = format!("{:?} - {}", key, cell_name);
                     if !self.runtime_data.cell_filter.is_empty()
                         && !label_text
