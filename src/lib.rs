@@ -6,10 +6,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use egui::{emath::RectTransform, Color32, ColorImage, Pos2, Rect};
+use egui::{Color32, ColorImage, emath::RectTransform, Pos2, Rect};
 use image::{
-    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
-    DynamicImage, ImageError, RgbaImage,
+    DynamicImage,
+    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind}, ImageError, RgbaImage,
 };
 use log::{info, warn};
 use seahash::hash;
@@ -255,60 +255,22 @@ fn color_image_to_dynamic_image(color_image: &ColorImage) -> Result<DynamicImage
 fn calculate_dimensions(
     dimensions: &Dimensions,
     landscape_records: &HashMap<CellKey, Landscape>,
-) -> Dimensions {
-    let mut min_x: Option<i32> = None;
-    let mut min_y: Option<i32> = None;
-    let mut max_x: Option<i32> = None;
-    let mut max_y: Option<i32> = None;
+) -> Option<Dimensions> {
+    let keys = landscape_records.keys();
 
-    for key in landscape_records.keys() {
-        // get grid dimensions
-        let x = key.0;
-        let y = key.1;
+    let min_x = keys.clone().map(|k| k.0).min()?;
+    let min_y = keys.clone().map(|k| k.1).min()?;
+    let max_x = keys.clone().map(|k| k.0).max()?;
+    let max_y = keys.clone().map(|k| k.1).max()?;
 
-        if let Some(minx) = min_x {
-            if x < minx {
-                min_x = Some(x);
-            }
-        } else {
-            min_x = Some(x);
-        }
-        if let Some(maxx) = max_x {
-            if x > maxx {
-                max_x = Some(x);
-            }
-        } else {
-            max_x = Some(x);
-        }
-        if let Some(miny) = min_y {
-            if y < miny {
-                min_y = Some(y);
-            }
-        } else {
-            min_y = Some(y);
-        }
-        if let Some(maxy) = max_y {
-            if y > maxy {
-                max_y = Some(y);
-            }
-        } else {
-            max_y = Some(y);
-        }
-    }
-
-    let min_y = min_y.unwrap();
-    let max_y = max_y.unwrap();
-    let min_x = min_x.unwrap();
-    let max_x = max_x.unwrap();
-
-    Dimensions {
+    Some(Dimensions {
         min_x,
         min_y,
         max_x,
         max_y,
         min_z: dimensions.min_z,
         max_z: dimensions.max_z,
-    }
+    })
 }
 
 fn load_texture(

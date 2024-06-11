@@ -8,10 +8,7 @@ use tes3::esp::{Landscape, Region};
 use background::{
     gamemap::generate_map, heightmap::generate_heightmap, landscape::compute_landscape_image,
 };
-use overlay::{
-    paths::{self, get_overlay_path_image},
-    regions::get_region_shapes,
-};
+use overlay::{paths::get_overlay_path_image, regions::get_region_shapes};
 
 use crate::*;
 
@@ -174,11 +171,11 @@ impl TemplateApp {
 
                                         if let Ok(tex) = load_texture(&self.data_files, ltex) {
                                             // resize the image
-                                            let image = image::imageops::resize(
+                                            let image = imageops::resize(
                                                 &tex,
                                                 texture_size as u32,
                                                 texture_size as u32,
-                                                image::imageops::FilterType::CatmullRom,
+                                                imageops::FilterType::CatmullRom,
                                             );
 
                                             // let size = [image.width() as _, image.height() as _];
@@ -213,7 +210,11 @@ impl TemplateApp {
         if let Some(dimensions) = new_dimensions {
             self.dimensions = dimensions.clone();
         } else if recalculate_dimensions {
-            self.dimensions = calculate_dimensions(&self.dimensions, &self.land_records);
+            if let Some(dims) = calculate_dimensions(&self.dimensions, &self.land_records) {
+                self.dimensions = dims;
+            } else {
+                return;
+            }
         }
 
         // calculate heights
@@ -325,26 +326,26 @@ impl TemplateApp {
 
                 // overlay paths
                 if self.ui_data.overlay_paths {
-                    let fg = paths::get_overlay_path_image(&self.dimensions, &self.land_records);
+                    let fg = get_overlay_path_image(&self.dimensions, &self.land_records);
                     let mut fg_image = color_image_to_dynamic_image(&fg)?;
 
                     #[allow(clippy::comparison_chain)]
                     if bg.size < fg.size {
                         // resize the smaller image to the larger image
-                        bg_image = image::imageops::resize(
+                        bg_image = imageops::resize(
                             &bg_image,
                             fg.size[0] as u32,
                             fg.size[1] as u32,
-                            image::imageops::FilterType::CatmullRom,
+                            imageops::FilterType::CatmullRom,
                         )
                         .into();
                     } else if bg.size > fg.size {
                         // resize the fg image to the bg image
-                        fg_image = image::imageops::resize(
+                        fg_image = imageops::resize(
                             &fg_image,
                             bg.size[0] as u32,
                             bg.size[1] as u32,
-                            image::imageops::FilterType::CatmullRom,
+                            imageops::FilterType::CatmullRom,
                         )
                         .into();
                     }
@@ -430,7 +431,7 @@ impl TemplateApp {
                                     let rect = shape.rect;
 
                                     // image buffer here is just the border of the rectangle with the stroke color and width
-                                    let img = image::ImageBuffer::from_fn(
+                                    let img = ImageBuffer::from_fn(
                                         rect.width() as u32,
                                         rect.height() as u32,
                                         |x, y| {
@@ -462,7 +463,7 @@ impl TemplateApp {
                                     let color = shape.fill;
                                     let rect = shape.rect;
 
-                                    let img = image::ImageBuffer::from_pixel(
+                                    let img = ImageBuffer::from_pixel(
                                         rect.width() as u32,
                                         rect.height() as u32,
                                         image::Rgba([color.r(), color.g(), color.b(), color.a()]),
@@ -484,7 +485,7 @@ impl TemplateApp {
                                     let p1 = points[i];
                                     let p2 = points[i + 1];
 
-                                    let img = image::ImageBuffer::from_fn(
+                                    let img = ImageBuffer::from_fn(
                                         (p1.distance(p2) + 1.0) as u32,
                                         stroke_width as u32,
                                         |x, _y| {

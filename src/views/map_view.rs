@@ -173,9 +173,12 @@ impl TemplateApp {
                 let x = transformed_position.x * VERTEX_CNT as f32;
                 let y = transformed_position.y * VERTEX_CNT as f32;
 
-                if let Some(height) =
-                    height_from_screen_space(&self.heights, &self.dimensions, x   as usize, y  as usize)
-                {
+                if let Some(height) = height_from_screen_space(
+                    &self.heights,
+                    &self.dimensions,
+                    x as usize,
+                    y as usize,
+                ) {
                     tooltipinfo.height = height;
                 }
             }
@@ -273,8 +276,8 @@ impl TemplateApp {
                 ui.close_menu();
             }
 
-            if ui.button("Paint cell").clicked() {
-                self.paint_cell(ctx);
+            if ui.button("Paint selected cells").clicked() {
+                self.paint_cells(ctx);
                 ui.close_menu();
             }
 
@@ -297,7 +300,14 @@ impl TemplateApp {
             if ui.ctx().input(|i| i.pointer.primary_clicked()) {
                 // if in the cell panel, we select the cell
                 let key = self.cellkey_from_screen(from_screen, interact_pos);
-                if self.cell_records.contains_key(&key) {
+
+                // check if withing dimensions
+                let inside = key.0 >= self.dimensions.min_x
+                    && key.0 <= self.dimensions.max_x
+                    && key.1 >= self.dimensions.min_y
+                    && key.1 <= self.dimensions.max_y;
+
+                if inside {
                     // toggle selection
                     if ui.ctx().input(|i| i.modifiers.ctrl) {
                         // toggle and add to selection

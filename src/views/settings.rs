@@ -129,6 +129,7 @@ impl TemplateApp {
             .text("Texture Resolution"),
         );
 
+        let mut changed = false;
         if ui
             .checkbox(
                 &mut self.ui_data.landscape_settings.show_water,
@@ -136,7 +137,7 @@ impl TemplateApp {
             )
             .changed()
         {
-            self.reload_background(ctx, None, false, false);
+            changed = true;
         }
         if ui
             .checkbox(
@@ -145,6 +146,11 @@ impl TemplateApp {
             )
             .changed()
         {
+            changed = true;
+        }
+        
+        if changed && self.ui_data.realtime_update {
+            // reload background
             self.reload_background(ctx, None, false, false);
         }
     }

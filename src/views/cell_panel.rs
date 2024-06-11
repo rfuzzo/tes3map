@@ -5,16 +5,19 @@ use crate::dimensions::Dimensions;
 use crate::TemplateApp;
 
 impl TemplateApp {
-    pub fn cell_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+    pub fn cell_panel(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         ui.heading("Cells");
 
         // horizontal layout
         ui.horizontal(|ui| {
             if ui.button("Reset").clicked() {
                 self.reload_background(ctx, None, true, true);
+                if self.ui_data.overlay_paths {
+                    self.reload_paths(ctx);
+                }
             }
             if ui.button("Paint selected").clicked() {
-                self.paint_cell(ctx);
+                self.paint_cells(ctx);
             }
         });
 
@@ -65,7 +68,7 @@ impl TemplateApp {
             });
     }
 
-    pub fn paint_cell(&mut self, ctx: &Context) {
+    pub fn paint_cells(&mut self, ctx: &Context) {
         // get min and max dimensions of selected cells
         let selected_cell_ids = self.runtime_data.selected_ids.clone();
 
@@ -84,10 +87,9 @@ impl TemplateApp {
             max_z: 0.0,
         };
 
-        let max_texture_side = ctx.input(|i| i.max_texture_side);
-        let max_texture_resolution = dimensions.get_max_texture_resolution(max_texture_side);
-        self.ui_data.landscape_settings.texture_size = max_texture_resolution;
-
         self.reload_background(ctx, Some(dimensions), true, true);
+        if self.ui_data.overlay_paths {
+            self.reload_paths(ctx);
+        }
     }
 }

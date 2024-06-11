@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use egui::{emath::RectTransform, Color32, Rounding, Shape};
+use egui::{Color32, emath::RectTransform, Rounding, Shape};
 
+use crate::{CellKey, get_rect_at_cell};
 use crate::dimensions::Dimensions;
-use crate::{get_rect_at_cell, CellKey};
 
 pub fn get_conflict_shapes(
     to_screen: RectTransform,
@@ -14,6 +14,15 @@ pub fn get_conflict_shapes(
     let mut shapes: Vec<Shape> = Vec::with_capacity(shapes_len as usize);
 
     for key in cell_conflicts.keys() {
+        // check that key is within the dimensions
+        if key.0 < dimensions.min_x
+            || key.0 > dimensions.max_x
+            || key.1 < dimensions.min_y
+            || key.1 > dimensions.max_y
+        {
+            continue;
+        }
+
         let rect = get_rect_at_cell(dimensions, to_screen, *key);
         let shape = Shape::rect_filled(
             rect,
