@@ -7,7 +7,7 @@ const NAME: &str = env!("CARGO_PKG_NAME");
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
-    use log::{LevelFilter, warn};
+    use log::{warn, LevelFilter};
 
     let log_path = format!("{}.log", NAME);
     let log_level = LevelFilter::Debug;
@@ -28,6 +28,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "tes3 map",
         native_options,
-        Box::new(|cc| Box::new(tes3map::TemplateApp::new(cc))),
+        Box::new(|cc| Ok(Box::new(tes3map::TemplateApp::new(cc)))),
     )
 }

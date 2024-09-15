@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use eframe::emath::RectTransform;
-use eframe::epaint::{Color32, Shape, Stroke};
+use eframe::epaint::{Color32, Shape};
+use egui::epaint::PathStroke;
 use egui::Vec2;
 
 use crate::dimensions::Dimensions;
@@ -37,7 +38,7 @@ pub fn get_travel_shapes(
 
             let line = Shape::LineSegment {
                 points: [to_screen * p00, to_screen * p11],
-                stroke: Stroke::new(2.0, color),
+                stroke: PathStroke::new(2.0, color),
             };
             shapes.push(line);
         }

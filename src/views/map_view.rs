@@ -3,13 +3,13 @@ use eframe::epaint::{Color32, Rounding, Shape, Stroke};
 use egui::Sense;
 use log::info;
 
-use crate::*;
 use crate::app::TooltipInfo;
 use crate::overlay::cities::get_cities_shapes;
 use crate::overlay::conflicts::get_conflict_shapes;
 use crate::overlay::grid::get_grid_shapes;
 use crate::overlay::regions::get_region_shapes;
 use crate::overlay::travel::get_travel_shapes;
+use crate::*;
 
 impl TemplateApp {
     fn cellkey_from_screen(&mut self, from_screen: RectTransform, pointer_pos: Pos2) -> CellKey {
@@ -192,41 +192,46 @@ impl TemplateApp {
 
             self.runtime_data.info = tooltipinfo;
 
-            if self.ui_data.show_tooltips {
-                egui::show_tooltip(ui.ctx(), egui::Id::new("hover_tooltip"), |ui| {
-                    let info = self.runtime_data.info.clone();
-                    ui.label(format!("{:?} - {}", info.key, info.cell_name));
-                    ui.label(format!("Region: {}", info.region));
+            if self.ui_data.show_tooltips && ui.ui_contains_pointer() {
+                egui::show_tooltip(
+                    ui.ctx(),
+                    ui.layer_id(),
+                    egui::Id::new("hover_tooltip"),
+                    |ui| {
+                        let info = self.runtime_data.info.clone();
+                        ui.label(format!("{:?} - {}", info.key, info.cell_name));
+                        ui.label(format!("Region: {}", info.region));
 
-                    // in debug mode, show the transformed position
-                    if cfg!(debug_assertions) {
-                        ui.label(format!("Debug: {}", info.debug));
-                    }
+                        // in debug mode, show the transformed position
+                        if cfg!(debug_assertions) {
+                            ui.label(format!("Debug: {}", info.debug));
+                        }
 
-                    // only show if current background is heightmap
-                    if self.ui_data.background == EBackground::HeightMap {
-                        ui.label("________");
-                        ui.label(format!("Height: {}", info.height));
-                    }
+                        // only show if current background is heightmap
+                        if self.ui_data.background == EBackground::HeightMap {
+                            ui.label("________");
+                            ui.label(format!("Height: {}", info.height));
+                        }
 
-                    // show conflicts
-                    if !info.conflicts.is_empty() {
-                        ui.label("________");
-                        ui.label("Conflicts:");
-                        for conflict in info.conflicts {
-                            // lookup plugin name by conflict id
-                            if let Some(plugin) = self
-                                .plugins
-                                .as_ref()
-                                .unwrap()
-                                .iter()
-                                .find(|p| p.hash == conflict)
-                            {
-                                ui.label(format!("  - {}", plugin.get_name()));
+                        // show conflicts
+                        if !info.conflicts.is_empty() {
+                            ui.label("________");
+                            ui.label("Conflicts:");
+                            for conflict in info.conflicts {
+                                // lookup plugin name by conflict id
+                                if let Some(plugin) = self
+                                    .plugins
+                                    .as_ref()
+                                    .unwrap()
+                                    .iter()
+                                    .find(|p| p.hash == conflict)
+                                {
+                                    ui.label(format!("  - {}", plugin.get_name()));
+                                }
                             }
                         }
-                    }
-                });
+                    },
+                );
             }
         }
 
@@ -259,7 +264,7 @@ impl TemplateApp {
 
         // settings
         // dumb ui hack
-        let settings_rect = Rect::from_min_max(response.rect.min, pos2(0.0, 0.0));
+        let settings_rect = Rect::from_pos(pos2(10.0, 50.0));
         ui.put(settings_rect, egui::Label::new(""));
 
         egui::Frame::popup(ui.style())

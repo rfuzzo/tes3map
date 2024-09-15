@@ -6,10 +6,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use egui::{Color32, ColorImage, emath::RectTransform, Pos2, Rect};
+use egui::{emath::RectTransform, Color32, ColorImage, Pos2, Rect};
 use image::{
-    DynamicImage,
-    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind}, ImageError, RgbaImage,
+    error::{ImageFormatHint, UnsupportedError, UnsupportedErrorKind},
+    DynamicImage, ImageError, RgbaImage,
 };
 use log::{info, warn};
 use seahash::hash;
@@ -317,7 +317,7 @@ fn load_texture(
 }
 
 fn decode_image(tex_path: PathBuf) -> Result<DynamicImage, ImageError> {
-    let mut reader = image::io::Reader::open(&tex_path)?;
+    let mut reader = image::ImageReader::open(&tex_path)?;
     let ext = tex_path
         .extension()
         .unwrap()
