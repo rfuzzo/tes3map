@@ -6,7 +6,7 @@ impl TemplateApp {
     /// Settings popup menu
     pub(crate) fn settings_ui(&mut self, ui: &mut Ui, ctx: &egui::Context) {
         ui.label("Background");
-        egui::ComboBox::from_id_source("background")
+        egui::ComboBox::from_id_salt("background")
             .selected_text(format!("{:?}", self.ui_data.background))
             .show_ui(ui, |ui| {
                 let mut clicked = false;
@@ -148,7 +148,7 @@ impl TemplateApp {
         {
             changed = true;
         }
-        
+
         if changed && self.ui_data.realtime_update {
             // reload background
             self.reload_background(ctx, None, false, false);
