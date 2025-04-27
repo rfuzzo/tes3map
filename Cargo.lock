@@ -3207,7 +3207,7 @@ dependencies = [
  "cfg-expr",
  "heck",
  "pkg-config",
- "toml",
+ "toml 0.8.21",
  "version-compare",
 ]
 
@@ -3255,6 +3255,7 @@ dependencies = [
  "serde_json",
  "simple-logging",
  "tes3",
+ "toml 0.5.11",
 ]
 
 [[package]]
@@ -3307,6 +3308,15 @@ checksum = "9117f5d4db391c1cf6927e7bea3db74b9a1c1add8f7eda9ffd5364f40f57b82f"
 dependencies = [
  "displaydoc",
  "zerovec",
+]
+
+[[package]]
+name = "toml"
+version = "0.5.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

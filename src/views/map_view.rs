@@ -123,6 +123,15 @@ impl TemplateApp {
             let shapes = get_conflict_shapes(to_screen, &self.dimensions, &self.cell_conflicts);
             painter.extend(shapes);
         }
+        // routes
+        if self.editor_data.enabled {
+            let shapes = overlay::mod_splines::get_segments_shapes(
+                to_screen,
+                &self.dimensions,
+                &self.editor_data,
+            );
+            painter.extend(shapes);
+        }
 
         // overlay selected cell
         for key in &self.runtime_data.selected_ids {

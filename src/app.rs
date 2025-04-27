@@ -17,6 +17,7 @@ pub enum ESidePanelView {
     #[default]
     Plugins,
     Cells,
+    Editor,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -34,6 +35,7 @@ pub struct TooltipInfo {
 pub struct TemplateApp {
     pub data_files: Option<PathBuf>,
     pub ui_data: SavedData,
+    pub editor_data: views::editor_panel::EditorData,
 
     // ui
     #[serde(skip)]

@@ -51,12 +51,14 @@ impl eframe::App for TemplateApp {
                     "Plugins",
                 );
                 ui.selectable_value(&mut self.side_panel_view, ESidePanelView::Cells, "Cells");
+                ui.selectable_value(&mut self.side_panel_view, ESidePanelView::Editor, "Editor");
             });
 
             match self.side_panel_view {
                 // view
                 app::ESidePanelView::Plugins => self.plugins_panel(ui, ctx),
                 app::ESidePanelView::Cells => self.cell_panel(ui, ctx),
+                app::ESidePanelView::Editor => self.editor_panel(ui, ctx),
             }
         });
 

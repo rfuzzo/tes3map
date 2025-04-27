@@ -2,7 +2,7 @@ use std::cmp::max;
 
 use egui::Pos2;
 
-use crate::{CellKey, GRID_SIZE};
+use crate::{CellKey, CELL_WIDTH, GRID_SIZE};
 
 #[derive(Debug, Clone, Default)]
 pub struct Dimensions {
@@ -81,5 +81,24 @@ impl Dimensions {
     pub fn get_max_texture_resolution(&self, max_texture_side: usize) -> usize {
         let max = max_texture_side / (GRID_SIZE * max(self.width(), self.height()));
         max.min(256)
+    }
+
+    // engine trnsforms
+    pub fn to_canvas_x(&self, x: f32) -> f32 {
+        (x - (self.min_x as f32)).max(0_f32)
+    }
+
+    pub fn to_canvas_y(&self, y: f32) -> f32 {
+        ((self.max_y as f32) + 1_f32 - y).max(0_f32)
+    }
+
+    pub fn to_canvas(&self, p: Pos2) -> Pos2 {
+        let px = p.x / CELL_WIDTH;
+        let py = p.y / CELL_WIDTH;
+
+        let x = self.to_canvas_x(px);
+        let y = self.to_canvas_y(py);
+
+        Pos2::new(x, y)
     }
 }

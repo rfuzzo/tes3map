@@ -33,6 +33,7 @@ mod views;
 const GRID_SIZE: usize = 16;
 const VERTEX_CNT: usize = 65;
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
+const CELL_WIDTH: f32 = 8192_f32;
 
 type CellKey = (i32, i32);
 type ImageBuffer = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;
