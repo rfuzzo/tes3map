@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use egui::{epaint::ColorMode, pos2, ColorImage, Pos2, Shape};
+use egui::{pos2, ColorImage, Pos2, Shape};
 use image::{imageops, ImageError};
 use log::{debug, error};
 use tes3::esp::{Landscape, Region};
@@ -478,37 +478,35 @@ impl TemplateApp {
                             }
                             // TODO fix lines
                             Shape::LineSegment { points, stroke } => {
-                                if let ColorMode::Solid(color) = stroke.color {
-                                    let stroke_width = stroke.width;
-                                    for i in 0..points.len() - 1 {
-                                        let p1 = points[i];
-                                        let p2 = points[i + 1];
+                                let stroke_width = stroke.width;
+                                for i in 0..points.len() - 1 {
+                                    let p1 = points[i];
+                                    let p2 = points[i + 1];
 
-                                        let img = ImageBuffer::from_fn(
-                                            (p1.distance(p2) + 1.0) as u32,
-                                            stroke_width as u32,
-                                            |x, _y| {
-                                                if x < stroke_width as u32 {
-                                                    image::Rgba([
-                                                        color.r(),
-                                                        color.g(),
-                                                        color.b(),
-                                                        color.a(),
-                                                    ])
-                                                } else {
-                                                    image::Rgba([0, 0, 0, 0])
-                                                }
-                                            },
-                                        );
+                                    let img = ImageBuffer::from_fn(
+                                        (p1.distance(p2) + 1.0) as u32,
+                                        stroke_width as u32,
+                                        |x, _y| {
+                                            if x < stroke_width as u32 {
+                                                image::Rgba([
+                                                    stroke.color.r(),
+                                                    stroke.color.g(),
+                                                    stroke.color.b(),
+                                                    stroke.color.a(),
+                                                ])
+                                            } else {
+                                                image::Rgba([0, 0, 0, 0])
+                                            }
+                                        },
+                                    );
 
-                                        let min = Pos2::new(p1.x.min(p2.x), p1.y.min(p2.y));
-                                        imageops::overlay(
-                                            &mut bg_image,
-                                            &img,
-                                            min.x as i64,
-                                            min.y as i64,
-                                        );
-                                    }
+                                    let min = Pos2::new(p1.x.min(p2.x), p1.y.min(p2.y));
+                                    imageops::overlay(
+                                        &mut bg_image,
+                                        &img,
+                                        min.x as i64,
+                                        min.y as i64,
+                                    );
                                 }
                             }
                             _ => {}

@@ -1,27 +1,17 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "lldb",
+            "name": "Debug Rust with C++ Debugger",
+            "type": "cppvsdbg",
             "request": "launch",
-            "name": "Debug executable 'tes3map'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=tes3map",
-                    "--package=tes3map"
-                ],
-                "filter": {
-                    "name": "tes3map",
-                    "kind": "bin"
-                }
-            },
+            "program": "${workspaceFolder}/target/debug/tes3map.exe",
             "args": [],
-            "cwd": "${workspaceFolder}"
-            //"cwd": "D:\\games\\_test"
-        },
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "preLaunchTask": "cargo build"
+        }
     ]
 }

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use egui::{Color32, emath::RectTransform, Rounding, Shape};
+use egui::{emath::RectTransform, Color32, CornerRadius, Shape};
 
-use crate::{CellKey, get_rect_at_cell};
 use crate::dimensions::Dimensions;
+use crate::{get_rect_at_cell, CellKey};
 
 pub fn get_conflict_shapes(
     to_screen: RectTransform,
@@ -26,7 +26,7 @@ pub fn get_conflict_shapes(
         let rect = get_rect_at_cell(dimensions, to_screen, *key);
         let shape = Shape::rect_filled(
             rect,
-            Rounding::default(),
+            CornerRadius::default(),
             Color32::from_rgba_unmultiplied(0, 255, 0, 10),
         );
         shapes.push(shape);

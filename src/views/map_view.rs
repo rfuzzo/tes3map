@@ -1,6 +1,6 @@
 use eframe::emath::{pos2, Pos2, Rect, RectTransform};
-use eframe::epaint::{Color32, Rounding, Shape, Stroke};
-use egui::Sense;
+use eframe::epaint::{Color32, Shape, Stroke};
+use egui::{CornerRadius, Sense, StrokeKind};
 use log::info;
 
 use crate::app::TooltipInfo;
@@ -127,16 +127,21 @@ impl TemplateApp {
         // overlay selected cell
         for key in &self.runtime_data.selected_ids {
             let rect = get_rect_at_cell(&self.dimensions, to_screen, *key);
-            let shape =
-                Shape::rect_stroke(rect, Rounding::default(), Stroke::new(4.0, Color32::RED));
+            let shape = Shape::rect_stroke(
+                rect,
+                CornerRadius::default(),
+                Stroke::new(4.0, Color32::RED),
+                StrokeKind::Outside,
+            );
             painter.add(shape);
         }
         if let Some(pivot_id) = self.runtime_data.pivot_id {
             let rect = get_rect_at_cell(&self.dimensions, to_screen, pivot_id);
             let shape = Shape::rect_stroke(
                 rect,
-                Rounding::default(),
+                CornerRadius::default(),
                 Stroke::new(4.0, Color32::LIGHT_BLUE),
+                StrokeKind::Outside,
             );
             painter.add(shape);
         }

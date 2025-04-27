@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use eframe::epaint::Stroke;
-use egui::{emath::RectTransform, Color32, Rounding, Shape};
+use egui::{emath::RectTransform, Color32, CornerRadius, Shape};
 use tes3::esp::Cell;
 
 use crate::{dimensions::Dimensions, get_rect_at_cell, CellKey};
@@ -26,7 +26,12 @@ pub fn get_cities_shapes(
                 }
 
                 let rect = get_rect_at_cell(dimensions, to_screen, key);
-                let shape = Shape::rect_stroke(rect, Rounding::default(), Stroke::new(4.0, color));
+                let shape = Shape::rect_stroke(
+                    rect,
+                    CornerRadius::default(),
+                    Stroke::new(4.0, color),
+                    egui::StrokeKind::Outside,
+                );
                 shapes.push(shape);
             }
         }

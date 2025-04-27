@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use egui::{emath::RectTransform, Color32, Rounding, Shape};
+use egui::{emath::RectTransform, Color32, CornerRadius, Shape};
 use tes3::esp::{Cell, Region};
 
 use crate::{dimensions::Dimensions, get_rect_at_cell, CellKey};
@@ -29,7 +29,7 @@ pub fn get_region_shapes(
                         );
 
                         let rect = get_rect_at_cell(dimensions, to_screen, key);
-                        let shape = Shape::rect_filled(rect, Rounding::default(), region_color);
+                        let shape = Shape::rect_filled(rect, CornerRadius::default(), region_color);
                         shapes.push(shape);
                     }
                 }
