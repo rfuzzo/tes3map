@@ -21,6 +21,7 @@ pub fn get_travel_shapes(
     to_screen: RectTransform,
     dimensions: &Dimensions,
     edges: &HashMap<String, Vec<(CellKey, CellKey)>>,
+    class_name: &str,
 ) -> Vec<Shape> {
     let shapes_len = edges
         .iter()
@@ -28,6 +29,11 @@ pub fn get_travel_shapes(
     let mut shapes: Vec<Shape> = Vec::with_capacity(shapes_len);
 
     for (class, destinations) in edges.iter() {
+        // skip if not the class we are looking for
+        if class != class_name {
+            continue;
+        }
+
         // get class color
         let color = get_color_for_class(class);
 

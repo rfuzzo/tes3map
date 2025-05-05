@@ -115,9 +115,14 @@ impl TemplateApp {
             let shapes = get_cities_shapes(to_screen, &self.dimensions, &self.cell_records);
             painter.extend(shapes);
         }
-        if self.ui_data.overlay_travel {
-            let shapes = get_travel_shapes(to_screen, &self.dimensions, &self.travel_edges);
-            painter.extend(shapes);
+        for class in self.travel_edges.keys() {
+            if let Some(class_option) = self.ui_data.overlay_travel.get(class) {
+                if *class_option {
+                    let shapes =
+                        get_travel_shapes(to_screen, &self.dimensions, &self.travel_edges, class);
+                    painter.extend(shapes);
+                }
+            }
         }
         if self.ui_data.overlay_conflicts {
             let shapes = get_conflict_shapes(to_screen, &self.dimensions, &self.cell_conflicts);
@@ -212,14 +217,11 @@ impl TemplateApp {
                     ui.layer_id(),
                     egui::Id::new("hover_tooltip"),
                     |ui| {
+                        ui.set_width(200.0);
+
                         let info = self.runtime_data.info.clone();
                         ui.label(format!("{:?} - {}", info.key, info.cell_name));
                         ui.label(format!("Region: {}", info.region));
-
-                        // in debug mode, show the transformed position
-                        if cfg!(debug_assertions) {
-                            ui.label(format!("Debug: {}", info.debug));
-                        }
 
                         // only show if current background is heightmap
                         if self.ui_data.background == EBackground::HeightMap {
@@ -228,7 +230,7 @@ impl TemplateApp {
                         }
 
                         // show conflicts
-                        if !info.conflicts.is_empty() {
+                        if self.ui_data.overlay_conflicts && !info.conflicts.is_empty() {
                             ui.label("________");
                             ui.label("Conflicts:");
                             for conflict in info.conflicts {
@@ -244,6 +246,8 @@ impl TemplateApp {
                                 }
                             }
                         }
+
+                        // show travel info
                     },
                 );
             }

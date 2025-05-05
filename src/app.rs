@@ -360,7 +360,7 @@ impl TemplateApp {
                 let any_overlay = self.ui_data.overlay_region
                     || self.ui_data.overlay_grid
                     || self.ui_data.overlay_cities
-                    || self.ui_data.overlay_travel
+                    || self.ui_data.overlay_travel.values().any(|v| *v)
                     || self.ui_data.overlay_conflicts;
 
                 if any_overlay {
@@ -404,14 +404,20 @@ impl TemplateApp {
                         all_shapes.extend(shapes);
                     }
                     // travel
-                    if self.ui_data.overlay_travel {
-                        let shapes = overlay::travel::get_travel_shapes(
-                            transform,
-                            &self.dimensions,
-                            &self.travel_edges,
-                        );
-                        all_shapes.extend(shapes);
+                    for class in self.travel_edges.keys() {
+                        if let Some(class_option) = self.ui_data.overlay_travel.get(class) {
+                            if *class_option {
+                                let shapes = overlay::travel::get_travel_shapes(
+                                    transform,
+                                    &self.dimensions,
+                                    &self.travel_edges,
+                                    class,
+                                );
+                                all_shapes.extend(shapes);
+                            }
+                        }
                     }
+
                     // conflicts
                     if self.ui_data.overlay_conflicts {
                         let shapes = overlay::conflicts::get_conflict_shapes(

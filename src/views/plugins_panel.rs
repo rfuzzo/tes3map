@@ -133,6 +133,7 @@ impl TemplateApp {
         self.ltex_records.clear();
         self.regn_records.clear();
         self.travel_edges.clear();
+        self.ui_data.overlay_travel.clear();
         self.cell_records.clear();
         self.cell_conflicts.clear();
 
@@ -265,6 +266,7 @@ impl TemplateApp {
                 v.push(pair);
             }
         }
+        self.ui_data.overlay_travel = ordered_edges.keys().map(|k| (k.clone(), false)).collect();
         self.travel_edges = ordered_edges;
 
         // get final list of cells

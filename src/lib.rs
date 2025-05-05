@@ -104,8 +104,8 @@ pub struct SavedData {
     pub overlay_region: bool,
     pub overlay_grid: bool,
     pub overlay_cities: bool,
-    pub overlay_travel: bool,
     pub overlay_conflicts: bool,
+    pub overlay_travel: HashMap<String, bool>, // travel class
 
     pub show_tooltips: bool,
 
