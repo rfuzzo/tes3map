@@ -20,6 +20,8 @@ pub struct EditorData {
     pub segments: HashMap<String, Segment>,
     #[serde(skip)]
     pub selected_point: Option<(String, usize)>,
+    #[serde(skip)]
+    pub selected_segment: Option<String>,
 }
 
 // route struct
@@ -55,6 +57,12 @@ pub struct Pos3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+}
+
+impl Pos3 {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
 }
 
 impl TemplateApp {
@@ -167,12 +175,37 @@ impl TemplateApp {
 
         // segments list
         ui.label("Segments:");
-        // TODO select all
+        // select all
+        // horizontal layout for select all and deselect all buttons
+        ui.horizontal(|ui| {
+            if ui.button("Select all").clicked() {
+                for segment in self.editor_data.segments.values_mut() {
+                    segment.selected = true;
+                }
+            }
+            if ui.button("Deselect all").clicked() {
+                for segment in self.editor_data.segments.values_mut() {
+                    segment.selected = false;
+                }
+            }
+        });
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             for (id, segment) in self.editor_data.segments.iter_mut() {
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut segment.selected, "Select");
-                    ui.label(id.clone());
+
+                    // if is current selected segment, highlight it
+                    if self.editor_data.selected_segment == Some(id.clone()) {
+                        ui.visuals_mut().override_text_color = Some(egui::Color32::RED);
+                    } else {
+                        ui.visuals_mut().override_text_color = None;
+                    }
+
+                    if ui.button(format!("Edit {}", id)).clicked() {
+                        // select the segment
+                        self.editor_data.selected_segment = Some(id.clone());
+                    }
                 });
             }
         });

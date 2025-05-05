@@ -5,6 +5,7 @@ use crate::{dimensions::Dimensions, views::editor_panel::EditorData};
 pub fn get_segments_shapes(
     to_screen: RectTransform,
     dimensions: &Dimensions,
+    zoom: f32,
     editor_data: &EditorData,
     hover_pos: &Option<Pos2>,
 ) -> Vec<Shape> {
@@ -27,10 +28,10 @@ pub fn get_segments_shapes(
             let mut radius = 2.0;
             if let Some(hover_pos) = hover_pos {
                 if (center - *hover_pos).length() < 10.0 {
-                    radius = 5.0;
+                    radius = 4.0;
                 }
             }
-            let dot = Shape::circle_filled(center, radius, Color32::RED);
+            let dot = Shape::circle_filled(center, radius * zoom, Color32::RED);
             shapes.push(dot);
         }
 
