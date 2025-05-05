@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use egui::Context;
+use egui::{ahash::HashMap, Context};
 
 use crate::TemplateApp;
 
+/// This is the editor panel for the map editor
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct EditorData {
     pub enabled: bool,
@@ -16,7 +17,9 @@ pub struct EditorData {
     #[serde(skip)]
     pub routes: Vec<Route>,
     #[serde(skip)]
-    pub segments: Vec<Segment>,
+    pub segments: HashMap<String, Segment>,
+    #[serde(skip)]
+    pub selected_point: Option<(String, usize)>,
 }
 
 // route struct
@@ -126,7 +129,9 @@ impl TemplateApp {
                     if let Ok(file) = std::fs::read_to_string(entry.path()) {
                         // parse the file as a segment
                         if let Ok(segment) = toml::de::from_str::<Segment>(&file) {
-                            self.editor_data.segments.push(segment);
+                            self.editor_data
+                                .segments
+                                .insert(segment.id.clone(), segment);
                         } else {
                             log::error!("Failed to parse segment file: {}", entry.path().display());
                         }
@@ -164,10 +169,10 @@ impl TemplateApp {
         ui.label("Segments:");
         // TODO select all
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for segment in self.editor_data.segments.iter_mut() {
+            for (id, segment) in self.editor_data.segments.iter_mut() {
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut segment.selected, "Select");
-                    ui.label(segment.id.clone());
+                    ui.label(id.clone());
                 });
             }
         });

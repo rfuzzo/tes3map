@@ -449,8 +449,8 @@ fn height_map_to_pixel_heights(
                 // look up heightmap
                 for (y, row) in heights.iter().rev().enumerate() {
                     for (x, value) in row.iter().enumerate() {
-                        let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
-                        let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
+                        let tx = VERTEX_CNT * dimensions.cell_to_canvas_x(cx) + x;
+                        let ty = VERTEX_CNT * dimensions.cell_to_canvas_y(cy) + y;
 
                         let i = (ty * dimensions.stride(VERTEX_CNT)) + tx;
                         pixels[i] = *value;
@@ -459,8 +459,8 @@ fn height_map_to_pixel_heights(
             } else {
                 for y in 0..VERTEX_CNT {
                     for x in 0..VERTEX_CNT {
-                        let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
-                        let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
+                        let tx = VERTEX_CNT * dimensions.cell_to_canvas_x(cx) + x;
+                        let ty = VERTEX_CNT * dimensions.cell_to_canvas_y(cy) + y;
 
                         let i = (ty * dimensions.stride(VERTEX_CNT)) + tx;
                         pixels[i] = min_z - 1_f32;
@@ -485,7 +485,7 @@ pub fn height_from_screen_space(
 }
 
 fn get_rect_at_cell(dimensions: &Dimensions, to_screen: RectTransform, key: CellKey) -> Rect {
-    let p00 = dimensions.tranform_to_canvas(key);
+    let p00 = dimensions.cell_to_canvas(key);
     let p11 = Pos2::new(p00.x + 1.0, p00.y + 1.0);
     Rect::from_two_pos(to_screen * p00, to_screen * p11)
 }

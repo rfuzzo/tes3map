@@ -38,8 +38,8 @@ pub fn get_travel_shapes(
         let color = get_color_for_class(class);
 
         for (key, value) in destinations {
-            let p00 = dimensions.tranform_to_canvas(*key) + Vec2::new(0.5, 0.5);
-            let p11 = dimensions.tranform_to_canvas(*value) + Vec2::new(0.5, 0.5);
+            let p00 = dimensions.cell_to_canvas(*key) + Vec2::new(0.5, 0.5);
+            let p11 = dimensions.cell_to_canvas(*value) + Vec2::new(0.5, 0.5);
 
             let line = Shape::LineSegment {
                 points: [to_screen * p00, to_screen * p11],

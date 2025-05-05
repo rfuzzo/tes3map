@@ -65,10 +65,10 @@ pub fn compute_landscape_image(
                                                 pixel[0], pixel[1], pixel[2], pixel[3],
                                             );
 
-                                            let tx = d.tranform_to_canvas_x(cx) * cell_size
+                                            let tx = d.cell_to_canvas_x(cx) * cell_size
                                                 + gx * texture_size
                                                 + x;
-                                            let ty = d.tranform_to_canvas_y(cy) * cell_size
+                                            let ty = d.cell_to_canvas_y(cy) * cell_size
                                                 + (GRID_SIZE - 1 - gy) * texture_size
                                                 + y;
 
@@ -112,10 +112,8 @@ pub fn compute_landscape_image(
                         // textures per tile
                         for x in 0..texture_size {
                             for y in 0..texture_size {
-                                let tx =
-                                    d.tranform_to_canvas_x(cx) * cell_size + gx * texture_size + x;
-                                let ty =
-                                    d.tranform_to_canvas_y(cy) * cell_size + gy * texture_size + y;
+                                let tx = d.cell_to_canvas_x(cx) * cell_size + gx * texture_size + x;
+                                let ty = d.cell_to_canvas_y(cy) * cell_size + gy * texture_size + y;
 
                                 let i = (ty * d.stride(cell_size)) + tx;
 

@@ -16,7 +16,7 @@ impl TemplateApp {
         let transformed_position = from_screen * pointer_pos;
         // get cell grid
         self.dimensions
-            .tranform_to_cell(Pos2::new(transformed_position.x, transformed_position.y))
+            .canvas_to_cell(Pos2::new(transformed_position.x, transformed_position.y))
     }
 
     pub fn map_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -134,6 +134,7 @@ impl TemplateApp {
                 to_screen,
                 &self.dimensions,
                 &self.editor_data,
+                &response.hover_pos(),
             );
             painter.extend(shapes);
         }
@@ -254,15 +255,27 @@ impl TemplateApp {
         }
 
         // panning
+        if !ui.ctx().input(|i| i.modifiers.ctrl) {
+            self.editor_data.selected_point = None;
+        }
+
         if response.drag_started() {
             if let Some(drag_start) = response.interact_pointer_pos() {
-                self.zoom_data.drag_start = drag_start;
+                if ui.ctx().input(|i| i.modifiers.ctrl) {
+                    self.on_ctrl_drag_started(from_screen, drag_start);
+                } else {
+                    self.zoom_data.drag_start = drag_start;
+                }
             }
         } else if response.dragged() {
             if let Some(current_pos) = response.interact_pointer_pos() {
-                let delta = current_pos - self.zoom_data.drag_start.to_vec2();
-                self.zoom_data.drag_delta = Some(delta);
-                self.zoom_data.drag_start = current_pos;
+                if ui.ctx().input(|i| i.modifiers.ctrl) {
+                    self.on_point_dragged(from_screen, current_pos);
+                } else {
+                    let delta = current_pos - self.zoom_data.drag_start.to_vec2();
+                    self.zoom_data.drag_delta = Some(delta);
+                    self.zoom_data.drag_start = current_pos;
+                }
             }
         }
 
@@ -321,72 +334,181 @@ impl TemplateApp {
         // click
         if let Some(interact_pos) = painter.ctx().pointer_interact_pos() {
             if ui.ctx().input(|i| i.pointer.primary_clicked()) {
-                // if in the cell panel, we select the cell
-                let key = self.cellkey_from_screen(from_screen, interact_pos);
+                // check if ctrl is pressed
+                if ui.ctx().input(|i| i.modifiers.ctrl) {
+                    self.on_ctrl_clicked(from_screen, interact_pos);
+                } else {
+                    self.on_click(ui, from_screen, interact_pos);
+                }
+            }
+        }
+    }
 
-                // check if withing dimensions
-                let inside = key.0 >= self.dimensions.min_x
-                    && key.0 <= self.dimensions.max_x
-                    && key.1 >= self.dimensions.min_y
-                    && key.1 <= self.dimensions.max_y;
+    fn on_point_dragged(&mut self, from_screen: RectTransform, current_pos: Pos2) {
+        // move the selected point if in editor mode
+        if self.editor_data.enabled {
+            if let Some((s, i)) = &self.editor_data.selected_point {
+                // get the segment
+                if let Some(segment) = self.editor_data.segments.get_mut(s) {
+                    // get the route
+                    if let Some(route1) = &mut segment.route1 {
+                        // get the point
+                        if let Some(point) = route1.get_mut(*i) {
+                            // tranlate the point to screen space
+                            let clicked_point = from_screen * current_pos;
 
-                if inside {
-                    // toggle selection
-                    if ui.ctx().input(|i| i.modifiers.ctrl) {
-                        // toggle and add to selection
-                        self.runtime_data.pivot_id = None;
-                        if self.runtime_data.selected_ids.contains(&key) {
-                            self.runtime_data.selected_ids.retain(|&x| x != key);
-                        } else {
-                            self.runtime_data.selected_ids.push(key);
-                        }
-                    } else if ui.ctx().input(|i| i.modifiers.shift) {
-                        // shift selects all cells between the last selected cell and the current cell
-                        if !self.runtime_data.selected_ids.is_empty() {
-                            // x check. check if
+                            let engine_pos = self
+                                .dimensions
+                                .canvas_to_engine(Pos2::new(clicked_point.x, clicked_point.y));
 
-                            let start = if self.runtime_data.selected_ids.len() == 1 {
-                                self.runtime_data.selected_ids[0]
-                            } else if self.runtime_data.pivot_id.is_some() {
-                                self.runtime_data.pivot_id.unwrap()
-                            } else {
-                                *self.runtime_data.selected_ids.last().unwrap()
-                            };
-                            self.runtime_data.pivot_id = Some(start);
-                            let end = key;
-
-                            // add all keys between start and end
-
-                            let min_x = start.0.min(end.0);
-                            let max_x = start.0.max(end.0);
-
-                            let min_y = start.1.min(end.1);
-                            let max_y = start.1.max(end.1);
-
-                            let mut keys = Vec::<CellKey>::new();
-
-                            for x in min_x..=max_x {
-                                for y in min_y..=max_y {
-                                    keys.push((x, y));
-                                }
-                            }
-
-                            self.runtime_data.selected_ids = keys;
-                        } else {
-                            self.runtime_data.selected_ids = vec![key];
-                            self.runtime_data.pivot_id = Some(key);
-                        }
-                    } else {
-                        #[allow(clippy::collapsible_else_if)]
-                        if self.runtime_data.selected_ids.contains(&key) {
-                            // toggle off if the same cell is clicked
-                            self.runtime_data.selected_ids = Vec::new();
-                            self.runtime_data.pivot_id = None;
-                        } else {
-                            self.runtime_data.selected_ids = vec![key];
-                            self.runtime_data.pivot_id = Some(key);
+                            // move the point
+                            point.x = engine_pos.x;
+                            point.y = engine_pos.y;
                         }
                     }
+                }
+            }
+        }
+    }
+
+    fn on_ctrl_clicked(&mut self, from_screen: RectTransform, interact_pos: Pos2) {
+        // if ctr is pressed and editor mode is enabled
+        if self.editor_data.enabled {
+            // try to get a point from the segments if distace is less than 10 pixels
+            let mut found = false;
+            let mut found_point = None;
+
+            // check if within distance of any point
+            for (id, segment) in self.editor_data.segments.iter().filter(|(_, s)| s.selected) {
+                if let Some(route1) = &segment.route1 {
+                    for (i, point) in route1.iter().enumerate() {
+                        let clicked_point = from_screen * interact_pos;
+                        let canvas_pos = self
+                            .dimensions
+                            .engine_to_canvas(Pos2::new(point.x, point.y));
+
+                        let dist = (clicked_point - canvas_pos).length();
+                        if dist < 0.1 {
+                            found = true;
+                            found_point = Some((id.clone(), i));
+                            break;
+                        }
+                    }
+                }
+                if found {
+                    break;
+                }
+            }
+
+            // if found, remove the point from the segment
+            if let Some((s, i)) = found_point {
+                // get the segment
+                if let Some(segment) = self.editor_data.segments.get_mut(&s) {
+                    // get the route
+                    if let Some(route1) = &mut segment.route1 {
+                        // remove the point
+                        route1.remove(i);
+                    }
+                }
+            }
+        }
+    }
+
+    fn on_ctrl_drag_started(&mut self, from_screen: RectTransform, interact_pos: Pos2) {
+        // if ctr is pressed and editor mode is enabled
+        if self.editor_data.enabled {
+            // try to get a point from the segments if distace is less than 10 pixels
+            let mut found = false;
+
+            // check if within distance of any point
+            for (id, segment) in self.editor_data.segments.iter().filter(|(_, s)| s.selected) {
+                if let Some(route1) = &segment.route1 {
+                    for (i, point) in route1.iter().enumerate() {
+                        let clicked_point = from_screen * interact_pos;
+                        let canvas_pos = self
+                            .dimensions
+                            .engine_to_canvas(Pos2::new(point.x, point.y));
+
+                        let dist = (clicked_point - canvas_pos).length();
+                        if dist < 0.1 {
+                            found = true;
+                            self.editor_data.selected_point = Some((id.clone(), i));
+                            break;
+                        }
+                    }
+                }
+                if found {
+                    break;
+                }
+            }
+        }
+    }
+
+    fn on_click(&mut self, ui: &mut egui::Ui, from_screen: RectTransform, interact_pos: Pos2) {
+        // if in the cell panel, we select the cell
+        let key = self.cellkey_from_screen(from_screen, interact_pos);
+
+        // check if withing dimensions
+        let inside = key.0 >= self.dimensions.min_x
+            && key.0 <= self.dimensions.max_x
+            && key.1 >= self.dimensions.min_y
+            && key.1 <= self.dimensions.max_y;
+
+        if inside {
+            // toggle selection
+            if ui.ctx().input(|i| i.modifiers.ctrl) {
+                // toggle and add to selection
+                self.runtime_data.pivot_id = None;
+                if self.runtime_data.selected_ids.contains(&key) {
+                    self.runtime_data.selected_ids.retain(|&x| x != key);
+                } else {
+                    self.runtime_data.selected_ids.push(key);
+                }
+            } else if ui.ctx().input(|i| i.modifiers.shift) {
+                // shift selects all cells between the last selected cell and the current cell
+                if !self.runtime_data.selected_ids.is_empty() {
+                    // x check. check if
+
+                    let start = if self.runtime_data.selected_ids.len() == 1 {
+                        self.runtime_data.selected_ids[0]
+                    } else if self.runtime_data.pivot_id.is_some() {
+                        self.runtime_data.pivot_id.unwrap()
+                    } else {
+                        *self.runtime_data.selected_ids.last().unwrap()
+                    };
+                    self.runtime_data.pivot_id = Some(start);
+                    let end = key;
+
+                    // add all keys between start and end
+
+                    let min_x = start.0.min(end.0);
+                    let max_x = start.0.max(end.0);
+
+                    let min_y = start.1.min(end.1);
+                    let max_y = start.1.max(end.1);
+
+                    let mut keys = Vec::<CellKey>::new();
+
+                    for x in min_x..=max_x {
+                        for y in min_y..=max_y {
+                            keys.push((x, y));
+                        }
+                    }
+
+                    self.runtime_data.selected_ids = keys;
+                } else {
+                    self.runtime_data.selected_ids = vec![key];
+                    self.runtime_data.pivot_id = Some(key);
+                }
+            } else {
+                #[allow(clippy::collapsible_else_if)]
+                if self.runtime_data.selected_ids.contains(&key) {
+                    // toggle off if the same cell is clicked
+                    self.runtime_data.selected_ids = Vec::new();
+                    self.runtime_data.pivot_id = None;
+                } else {
+                    self.runtime_data.selected_ids = vec![key];
+                    self.runtime_data.pivot_id = Some(key);
                 }
             }
         }

@@ -6,12 +6,13 @@ pub fn get_segments_shapes(
     to_screen: RectTransform,
     dimensions: &Dimensions,
     editor_data: &EditorData,
+    hover_pos: &Option<Pos2>,
 ) -> Vec<Shape> {
     let mut shapes: Vec<Shape> = Vec::new();
 
     // go through all segments
-    for segment in editor_data.segments.iter().filter(|s| s.selected) {
-        // get the route1 and route2 points
+    for (_, segment) in editor_data.segments.iter().filter(|(_, s)| s.selected) {
+        // TODO get route2 points
         let mut points = Vec::new();
         if let Some(route1) = &segment.route1 {
             for point in route1 {
@@ -21,9 +22,15 @@ pub fn get_segments_shapes(
 
         for point in points.iter() {
             let pos2 = Pos2::new(point[0], point[1]);
-            let canvas_pos = dimensions.to_canvas(pos2);
-
-            let dot = Shape::circle_filled(to_screen * canvas_pos, 2.0, Color32::RED);
+            let canvas_pos = dimensions.engine_to_canvas(pos2);
+            let center = to_screen * canvas_pos;
+            let mut radius = 2.0;
+            if let Some(hover_pos) = hover_pos {
+                if (center - *hover_pos).length() < 10.0 {
+                    radius = 5.0;
+                }
+            }
+            let dot = Shape::circle_filled(center, radius, Color32::RED);
             shapes.push(dot);
         }
 
@@ -34,8 +41,8 @@ pub fn get_segments_shapes(
 
             let line = Shape::LineSegment {
                 points: [
-                    to_screen * dimensions.to_canvas(p0),
-                    to_screen * dimensions.to_canvas(p1),
+                    to_screen * dimensions.engine_to_canvas(p0),
+                    to_screen * dimensions.engine_to_canvas(p1),
                 ],
                 stroke: egui::Stroke::new(2.0, Color32::YELLOW),
             };
