@@ -114,39 +114,72 @@ impl TemplateApp {
         }
 
         // load button
-        if ui.button("Load routes").clicked() {
-            // load routes from folder
-            self.editor_data.routes.clear();
-            if let Ok(entries) = std::fs::read_dir(&self.editor_data.routes_folder) {
-                for entry in entries.flatten() {
-                    if let Ok(file) = std::fs::read_to_string(entry.path()) {
-                        // parse the file as a route
-                        if let Ok(route) = toml::de::from_str::<Route>(&file) {
-                            self.editor_data.routes.push(route);
-                        } else {
-                            log::error!("Failed to parse route file: {}", entry.path().display());
+        ui.horizontal(|ui| {
+            if ui.button("Load routes").clicked() {
+                // load routes from folder
+                self.editor_data.routes.clear();
+                if let Ok(entries) = std::fs::read_dir(&self.editor_data.routes_folder) {
+                    for entry in entries.flatten() {
+                        if let Ok(file) = std::fs::read_to_string(entry.path()) {
+                            // parse the file as a route
+                            if let Ok(route) = toml::de::from_str::<Route>(&file) {
+                                self.editor_data.routes.push(route);
+                            } else {
+                                log::error!(
+                                    "Failed to parse route file: {}",
+                                    entry.path().display()
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // load segments from folder
+                self.editor_data.segments.clear();
+                if let Ok(entries) = std::fs::read_dir(&self.editor_data.segments_folder) {
+                    for entry in entries.flatten() {
+                        if let Ok(file) = std::fs::read_to_string(entry.path()) {
+                            // parse the file as a segment
+                            if let Ok(segment) = toml::de::from_str::<Segment>(&file) {
+                                self.editor_data
+                                    .segments
+                                    .insert(segment.id.clone(), segment);
+                            } else {
+                                log::error!(
+                                    "Failed to parse segment file: {}",
+                                    entry.path().display()
+                                );
+                            }
                         }
                     }
                 }
             }
 
-            // load segments from folder
-            self.editor_data.segments.clear();
-            if let Ok(entries) = std::fs::read_dir(&self.editor_data.segments_folder) {
-                for entry in entries.flatten() {
-                    if let Ok(file) = std::fs::read_to_string(entry.path()) {
-                        // parse the file as a segment
-                        if let Ok(segment) = toml::de::from_str::<Segment>(&file) {
-                            self.editor_data
-                                .segments
-                                .insert(segment.id.clone(), segment);
-                        } else {
-                            log::error!("Failed to parse segment file: {}", entry.path().display());
-                        }
-                    }
+            // save button
+            if ui.button("Save routes").clicked() {
+                // TODO rounding
+
+                // save routes to folder
+                for route in &self.editor_data.routes {
+                    let file = toml::ser::to_string_pretty(route).unwrap();
+                    let path = self
+                        .editor_data
+                        .routes_folder
+                        .join(format!("{}_{}.toml", route.id.start, route.id.destination));
+                    std::fs::write(path, file).unwrap();
+                }
+
+                // save segments to folder
+                for segment in self.editor_data.segments.values() {
+                    let file = toml::ser::to_string_pretty(segment).unwrap();
+                    let path = self
+                        .editor_data
+                        .segments_folder
+                        .join(format!("{}.toml", segment.id));
+                    std::fs::write(path, file).unwrap();
                 }
             }
-        }
+        });
 
         ui.separator();
 

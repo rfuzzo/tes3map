@@ -149,7 +149,7 @@ impl TemplateApp {
                 rect,
                 CornerRadius::default(),
                 Stroke::new(4.0, Color32::RED),
-                StrokeKind::Outside,
+                StrokeKind::Middle,
             );
             painter.add(shape);
         }
@@ -159,7 +159,7 @@ impl TemplateApp {
                 rect,
                 CornerRadius::default(),
                 Stroke::new(4.0, Color32::LIGHT_BLUE),
-                StrokeKind::Outside,
+                StrokeKind::Middle,
             );
             painter.add(shape);
         }

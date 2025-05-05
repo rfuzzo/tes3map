@@ -30,7 +30,7 @@ pub fn get_cities_shapes(
                     rect,
                     CornerRadius::default(),
                     Stroke::new(4.0, color),
-                    egui::StrokeKind::Outside,
+                    egui::StrokeKind::Middle,
                 );
                 shapes.push(shape);
             }
