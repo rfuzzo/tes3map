@@ -168,92 +168,44 @@ impl TemplateApp {
 
         // hover
         if let Some(pointer_pos) = response.hover_pos() {
-            let key = self.cellkey_from_screen(from_screen, pointer_pos);
-            self.runtime_data.hover_pos = key;
+            if !self.editor_data.enabled {
+                self.on_hover(ui, from_screen, pointer_pos);
+            } else {
+                // context menu for editor mode
+                // get point
+                let found_point = self.get_point(from_screen, pointer_pos, true);
+                if let Some((id, i)) = found_point {
+                    ui.set_width(200.0);
 
-            let mut tooltipinfo = TooltipInfo {
-                key,
-                height: 0.0,
-                region: String::new(),
-                cell_name: String::new(),
-                conflicts: Vec::new(),
-                debug: String::new(),
-            };
+                    if let Some(segment) = self.editor_data.segments.get_mut(&id) {
+                        // get the route
+                        if let Some(route1) = &mut segment.route1 {
+                            if self.ui_data.show_tooltips && ui.ui_contains_pointer() {
+                                egui::show_tooltip(
+                                    ui.ctx(),
+                                    ui.layer_id(),
+                                    egui::Id::new("hover_tooltip"),
+                                    |ui| {
+                                        ui.set_width(200.0);
 
-            // get cell
-            if let Some(cell) = self.cell_records.get(&key) {
-                tooltipinfo.cell_name.clone_from(&cell.name);
-                if let Some(region) = cell.region.as_ref() {
-                    tooltipinfo.region.clone_from(region);
-                }
-            }
+                                        // labels
+                                        ui.label(format!("Segment: {}", id));
+                                        ui.label(format!("Point: {}", route1[i]));
 
-            // get height
-            if self.ui_data.background == EBackground::HeightMap {
-                let transformed_position = from_screen * pointer_pos;
-                tooltipinfo.debug = format!("{:?}", transformed_position);
+                                        ui.separator();
 
-                let x = transformed_position.x * VERTEX_CNT as f32;
-                let y = transformed_position.y * VERTEX_CNT as f32;
-
-                if let Some(height) = height_from_screen_space(
-                    &self.heights,
-                    &self.dimensions,
-                    x as usize,
-                    y as usize,
-                ) {
-                    tooltipinfo.height = height;
-                }
-            }
-
-            // get conflicts
-            if self.ui_data.show_tooltips {
-                if let Some(conflicts) = self.cell_conflicts.get(&key) {
-                    tooltipinfo.conflicts.clone_from(conflicts);
-                }
-            }
-
-            self.runtime_data.info = tooltipinfo;
-
-            if self.ui_data.show_tooltips && ui.ui_contains_pointer() {
-                egui::show_tooltip(
-                    ui.ctx(),
-                    ui.layer_id(),
-                    egui::Id::new("hover_tooltip"),
-                    |ui| {
-                        ui.set_width(200.0);
-
-                        let info = self.runtime_data.info.clone();
-                        ui.label(format!("{:?} - {}", info.key, info.cell_name));
-                        ui.label(format!("Region: {}", info.region));
-
-                        // only show if current background is heightmap
-                        if self.ui_data.background == EBackground::HeightMap {
-                            ui.label("________");
-                            ui.label(format!("Height: {}", info.height));
-                        }
-
-                        // show conflicts
-                        if self.ui_data.overlay_conflicts && !info.conflicts.is_empty() {
-                            ui.label("________");
-                            ui.label("Conflicts:");
-                            for conflict in info.conflicts {
-                                // lookup plugin name by conflict id
-                                if let Some(plugin) = self
-                                    .plugins
-                                    .as_ref()
-                                    .unwrap()
-                                    .iter()
-                                    .find(|p| p.hash == conflict)
-                                {
-                                    ui.label(format!("  - {}", plugin.get_name()));
-                                }
+                                        ui.label("Ctrl + Click to remove point".to_string());
+                                        ui.label("Ctrl + Drag to move point".to_string());
+                                        ui.label("Click to select segment".to_string());
+                                        ui.label("Ctrl + Click to add point".to_string());
+                                    },
+                                );
                             }
                         }
-
-                        // show travel info
-                    },
-                );
+                    }
+                } else {
+                    self.on_hover(ui, from_screen, pointer_pos);
+                }
             }
         }
 
@@ -308,41 +260,135 @@ impl TemplateApp {
                 egui::CollapsingHeader::new("Settings ").show(ui, |ui| self.settings_ui(ui, ctx));
             });
 
-        response.context_menu(|ui| {
-            if ui.button("Reset zoom").clicked() {
-                self.reset_pan();
-                self.reset_zoom();
-                ui.close_menu();
-            }
-
-            if ui.button("Paint selected cells").clicked() {
-                self.paint_cells(ctx);
-                ui.close_menu();
-            }
-
-            ui.separator();
-
-            if ui.button("Save as image").clicked() {
-                match self.save_image(ctx) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        info!("Error saving image: {:?}", e);
-                    }
-                }
-
-                ui.close_menu();
-            }
-        });
+        // context menu only if ctrl is not pressed
+        if !ui.ctx().input(|i| i.modifiers.ctrl) {
+            response.context_menu(|ui| {
+                self.context_menu(ctx, ui);
+            });
+        }
 
         // click
         if let Some(interact_pos) = painter.ctx().pointer_interact_pos() {
             if ui.ctx().input(|i| i.modifiers.ctrl) {
                 if ui.ctx().input(|i| i.pointer.primary_clicked()) {
                     self.on_ctrl_clicked(from_screen, interact_pos);
+                } else if ui.ctx().input(|i| i.pointer.secondary_clicked()) {
+                    self.on_ctrl_right_clicked(from_screen, interact_pos);
                 }
             } else if ui.ctx().input(|i| i.pointer.primary_clicked()) {
                 self.on_click(ui, from_screen, interact_pos);
             }
+        }
+    }
+
+    fn on_hover(&mut self, ui: &mut egui::Ui, from_screen: RectTransform, pointer_pos: Pos2) {
+        let key = self.cellkey_from_screen(from_screen, pointer_pos);
+        self.runtime_data.hover_pos = key;
+
+        let mut tooltipinfo = TooltipInfo {
+            key,
+            height: 0.0,
+            region: String::new(),
+            cell_name: String::new(),
+            conflicts: Vec::new(),
+            debug: String::new(),
+        };
+
+        // get cell
+        if let Some(cell) = self.cell_records.get(&key) {
+            tooltipinfo.cell_name.clone_from(&cell.name);
+            if let Some(region) = cell.region.as_ref() {
+                tooltipinfo.region.clone_from(region);
+            }
+        }
+
+        // get height
+        if self.ui_data.background == EBackground::HeightMap {
+            let transformed_position = from_screen * pointer_pos;
+            tooltipinfo.debug = format!("{:?}", transformed_position);
+
+            let x = transformed_position.x * VERTEX_CNT as f32;
+            let y = transformed_position.y * VERTEX_CNT as f32;
+
+            if let Some(height) =
+                height_from_screen_space(&self.heights, &self.dimensions, x as usize, y as usize)
+            {
+                tooltipinfo.height = height;
+            }
+        }
+
+        // get conflicts
+        if self.ui_data.show_tooltips {
+            if let Some(conflicts) = self.cell_conflicts.get(&key) {
+                tooltipinfo.conflicts.clone_from(conflicts);
+            }
+        }
+
+        self.runtime_data.info = tooltipinfo;
+
+        if self.ui_data.show_tooltips && ui.ui_contains_pointer() {
+            egui::show_tooltip(
+                ui.ctx(),
+                ui.layer_id(),
+                egui::Id::new("hover_tooltip"),
+                |ui| {
+                    ui.set_width(200.0);
+
+                    let info = self.runtime_data.info.clone();
+                    ui.label(format!("{:?} - {}", info.key, info.cell_name));
+                    ui.label(format!("Region: {}", info.region));
+
+                    // only show if current background is heightmap
+                    if self.ui_data.background == EBackground::HeightMap {
+                        ui.label("________");
+                        ui.label(format!("Height: {}", info.height));
+                    }
+
+                    // show conflicts
+                    if self.ui_data.overlay_conflicts && !info.conflicts.is_empty() {
+                        ui.label("________");
+                        ui.label("Conflicts:");
+                        for conflict in info.conflicts {
+                            // lookup plugin name by conflict id
+                            if let Some(plugin) = self
+                                .plugins
+                                .as_ref()
+                                .unwrap()
+                                .iter()
+                                .find(|p| p.hash == conflict)
+                            {
+                                ui.label(format!("  - {}", plugin.get_name()));
+                            }
+                        }
+                    }
+                },
+            );
+        }
+    }
+
+    fn context_menu(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
+        if ui.button("Reset zoom").clicked() {
+            self.reset_pan();
+            self.reset_zoom();
+            ui.close_menu();
+        }
+
+        if ui.button("Paint selected cells").clicked() {
+            self.paint_cells(ctx);
+            ui.close_menu();
+        }
+
+        ui.separator();
+
+        if ui.button("Save as image").clicked() {
+            match self.save_image(ctx) {
+                Ok(_) => {}
+                Err(e) => {
+                    info!("Error saving image: {:?}", e);
+                }
+            }
+
+            ui.close_menu();
         }
     }
 
@@ -356,7 +402,7 @@ impl TemplateApp {
                     if let Some(route1) = &mut segment.route1 {
                         // get the point
                         if let Some(_point) = route1.get_mut(*i) {
-                            // tranlate the point to screen space
+                            // translate the point to screen space
                             let clicked_point = from_screen * current_pos;
 
                             let engine_pos = self
@@ -388,6 +434,11 @@ impl TemplateApp {
 
                             // check if the point is close to another point in a different segment
                             for (id, segment) in self.editor_data.segments.iter_mut() {
+                                // continue if segment is not selected
+                                if !segment.selected {
+                                    continue;
+                                }
+
                                 if id != s {
                                     if let Some(route1) = &mut segment.route1 {
                                         for point in route1.iter_mut() {
@@ -409,50 +460,56 @@ impl TemplateApp {
         }
     }
 
-    fn on_ctrl_clicked(&mut self, from_screen: RectTransform, interact_pos: Pos2) {
-        // if ctr is pressed and editor mode is enabled
-        if self.editor_data.enabled {
-            let found_point = self.get_point(from_screen, interact_pos);
+    fn on_ctrl_right_clicked(&mut self, from_screen: RectTransform, interact_pos: Pos2) {
+        if !self.editor_data.enabled {
+            return;
+        }
 
-            // if found, remove the point from the segment
-            if let Some((id, i)) = found_point {
-                // get the segment
-                if let Some(segment) = self.editor_data.segments.get_mut(&id) {
-                    // get the route
-                    if let Some(route1) = &mut segment.route1 {
-                        // remove the point
-                        route1.remove(i);
-                    }
+        let found_point = self.get_point(from_screen, interact_pos, false);
+        if let Some((id, i)) = found_point {
+            // get the segment
+            if let Some(segment) = self.editor_data.segments.get_mut(&id) {
+                // get the route
+                if let Some(route1) = &mut segment.route1 {
+                    // remove the point
+                    route1.remove(i);
                 }
-            } else {
-                // add a point to the selected segment
-                if let Some(selected_segment) = &self.editor_data.selected_segment {
-                    // get the segment
-                    if let Some(segment) = self.editor_data.segments.get_mut(selected_segment) {
-                        // get the route
-                        if let Some(route1) = &mut segment.route1 {
-                            // get point coordinates
-                            let clicked_point = from_screen * interact_pos;
-                            let engine_pos = self.dimensions.canvas_to_engine(clicked_point);
+            }
+        }
+    }
 
-                            // add the point after the nearest point
-                            let mut min_dist = f32::MAX;
-                            let mut min_index = 0;
-                            for (i, point) in route1.iter().enumerate() {
-                                let dist = (engine_pos - Pos2::new(point.x, point.y)).length();
-                                if dist < min_dist {
-                                    min_dist = dist;
-                                    min_index = i;
-                                }
-                            }
-                            // add the point to the route
-                            if min_index == route1.len() - 1 {
-                                route1.push(Pos3::new(engine_pos.x, engine_pos.y, 0.0));
-                            } else {
-                                route1
-                                    .insert(min_index, Pos3::new(engine_pos.x, engine_pos.y, 0.0));
-                            }
+    fn on_ctrl_clicked(&mut self, from_screen: RectTransform, interact_pos: Pos2) {
+        if !self.editor_data.enabled {
+            return;
+        }
+
+        // if found, remove the point from the segment
+
+        // add a point to the selected segment
+        if let Some(selected_segment) = &self.editor_data.current_segment {
+            // get the segment
+            if let Some(segment) = self.editor_data.segments.get_mut(selected_segment) {
+                // get the route
+                if let Some(route1) = &mut segment.route1 {
+                    // get point coordinates
+                    let clicked_point = from_screen * interact_pos;
+                    let engine_pos = self.dimensions.canvas_to_engine(clicked_point);
+
+                    // add the point after the nearest point
+                    let mut min_dist = f32::MAX;
+                    let mut min_index = 0;
+                    for (i, point) in route1.iter().enumerate() {
+                        let dist = (engine_pos - Pos2::new(point.x, point.y)).length();
+                        if dist < min_dist {
+                            min_dist = dist;
+                            min_index = i;
                         }
+                    }
+                    // add the point to the route
+                    if min_index == route1.len() - 1 {
+                        route1.push(Pos3::new(engine_pos.x, engine_pos.y, 0.0));
+                    } else {
+                        route1.insert(min_index, Pos3::new(engine_pos.x, engine_pos.y, 0.0));
                     }
                 }
             }
@@ -462,47 +519,25 @@ impl TemplateApp {
     fn on_ctrl_drag_started(&mut self, from_screen: RectTransform, interact_pos: Pos2) {
         // if ctr is pressed and editor mode is enabled
         if self.editor_data.enabled {
-            let found_point = self.get_point(from_screen, interact_pos);
+            let found_point = self.get_point(from_screen, interact_pos, false);
             if let Some((id, i)) = found_point {
                 self.editor_data.selected_point = Some((id.clone(), i));
             }
         }
     }
 
-    fn get_point(
-        &mut self,
-        from_screen: RectTransform,
-        interact_pos: Pos2,
-    ) -> Option<(String, usize)> {
-        // try to get a point from the segments if distace is less than 10 pixels
-        let mut found = false;
-        let mut found_point = None;
+    fn on_click(&mut self, ui: &mut egui::Ui, from_screen: RectTransform, interact_pos: Pos2) {
+        if self.editor_data.enabled {
+            let found_point = self.get_point(from_screen, interact_pos, true);
 
-        // check if within distance of any point
-        for (id, segment) in self.editor_data.segments.iter().filter(|(_, s)| s.selected) {
-            if let Some(route1) = &segment.route1 {
-                for (i, point) in route1.iter().enumerate() {
-                    let clicked_point = from_screen * interact_pos;
-                    let canvas_pos = self
-                        .dimensions
-                        .engine_to_canvas(Pos2::new(point.x, point.y));
-
-                    let dist = (clicked_point - canvas_pos).length();
-                    if dist < 0.1 * self.zoom_data.zoom {
-                        found = true;
-                        found_point = Some((id.clone(), i));
-                        break;
-                    }
-                }
-            }
-            if found {
-                break;
+            // if found, remove the point from the segment
+            if let Some((id, _i)) = found_point {
+                // set the current segment
+                self.editor_data.current_segment = Some(id.clone());
+                return;
             }
         }
-        found_point
-    }
 
-    fn on_click(&mut self, ui: &mut egui::Ui, from_screen: RectTransform, interact_pos: Pos2) {
         // if in the cell panel, we select the cell
         let key = self.cellkey_from_screen(from_screen, interact_pos);
 
@@ -570,5 +605,48 @@ impl TemplateApp {
                 }
             }
         }
+    }
+
+    fn get_point(
+        &mut self,
+        from_screen: RectTransform,
+        interact_pos: Pos2,
+        ignore_current_segment: bool,
+    ) -> Option<(String, usize)> {
+        // try to get a point from the segments if distace is less than 10 pixels
+        let mut found = false;
+        let mut found_point = None;
+
+        // check if within distance of any point in displayed segments
+        for (id, segment) in self.editor_data.segments.iter().filter(|(_, s)| s.selected) {
+            // check if the segment is selected for editing
+            if !ignore_current_segment {
+                if let Some(selected_segment) = &self.editor_data.current_segment {
+                    if selected_segment != id {
+                        continue;
+                    }
+                }
+            }
+
+            if let Some(route1) = &segment.route1 {
+                for (i, point) in route1.iter().enumerate() {
+                    let clicked_point = from_screen * interact_pos;
+                    let canvas_pos = self
+                        .dimensions
+                        .engine_to_canvas(Pos2::new(point.x, point.y));
+
+                    let dist = (clicked_point - canvas_pos).length();
+                    if dist < 0.1 {
+                        found = true;
+                        found_point = Some((id.clone(), i));
+                        break;
+                    }
+                }
+            }
+            if found {
+                break;
+            }
+        }
+        found_point
     }
 }

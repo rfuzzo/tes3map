@@ -66,7 +66,9 @@ impl TemplateApp {
         ui.checkbox(&mut self.ui_data.overlay_grid, "Show cell grid");
         ui.checkbox(&mut self.ui_data.overlay_cities, "Show cities");
         // travel
-        for class in self.travel_edges.keys() {
+        let mut keys = self.travel_edges.keys().collect::<Vec<_>>();
+        keys.sort();
+        for class in keys {
             if let Some(class_option) = self.ui_data.overlay_travel.get_mut(class) {
                 ui.checkbox(class_option, format!("\tShow travel: {}", class));
             }

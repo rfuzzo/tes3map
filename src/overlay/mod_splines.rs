@@ -12,12 +12,23 @@ pub fn get_segments_shapes(
     let mut shapes: Vec<Shape> = Vec::new();
 
     // go through all segments
-    for (_e, segment) in editor_data.segments.iter().filter(|(_, s)| s.selected)
-    //.map(|(_, s)| s.clone())
-    //.enumerate()
-    {
-        // get random color from e
-        let color = Color32::YELLOW;
+    for (_e, segment) in editor_data.segments.iter().filter(|(_, s)| s.selected) {
+        // is current segment?
+        let is_current = if let Some(current_segment) = &editor_data.current_segment {
+            current_segment == &segment.id
+        } else {
+            false
+        };
+
+        let mut line_color = Color32::YELLOW;
+        if is_current {
+            line_color = Color32::GREEN;
+        }
+
+        let mut point_color = Color32::RED;
+        if is_current {
+            point_color = Color32::DARK_RED;
+        }
 
         let mut points = Vec::new();
         if let Some(route1) = &segment.route1 {
@@ -38,7 +49,7 @@ pub fn get_segments_shapes(
                     radius = 3.0;
                 }
             }
-            let dot = Shape::circle_filled(center, radius * zoom, Color32::RED);
+            let dot = Shape::circle_filled(center, radius * zoom, point_color);
             shapes.push(dot);
         }
 
@@ -52,7 +63,7 @@ pub fn get_segments_shapes(
                     to_screen * dimensions.engine_to_canvas(p0),
                     to_screen * dimensions.engine_to_canvas(p1),
                 ],
-                stroke: egui::Stroke::new(2.0, color),
+                stroke: egui::Stroke::new(2.0, line_color),
             };
             shapes.push(line);
         }

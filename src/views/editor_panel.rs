@@ -21,7 +21,7 @@ pub struct EditorData {
     #[serde(skip)]
     pub selected_point: Option<(String, usize)>,
     #[serde(skip)]
-    pub selected_segment: Option<String>,
+    pub current_segment: Option<String>,
 }
 
 // route struct
@@ -57,6 +57,13 @@ pub struct Pos3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+}
+
+// implement display for Pos3
+impl std::fmt::Display for Pos3 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
 }
 
 impl Pos3 {
@@ -113,9 +120,13 @@ impl TemplateApp {
             return;
         }
 
+        ui.separator();
+
         // load button
         ui.horizontal(|ui| {
             if ui.button("Load routes").clicked() {
+                self.editor_data.current_segment = None;
+
                 // load routes from folder
                 self.editor_data.routes.clear();
                 if let Ok(entries) = std::fs::read_dir(&self.editor_data.routes_folder) {
@@ -157,8 +168,6 @@ impl TemplateApp {
 
             // save button
             if ui.button("Save routes").clicked() {
-                // TODO rounding
-
                 // save routes to folder
                 for route in &self.editor_data.routes {
                     let file = toml::ser::to_string_pretty(route).unwrap();
@@ -170,8 +179,25 @@ impl TemplateApp {
                 }
 
                 // save segments to folder
-                for segment in self.editor_data.segments.values() {
-                    let file = toml::ser::to_string_pretty(segment).unwrap();
+                for (_, segment) in self.editor_data.segments.iter().filter(|(_, s)| s.selected) {
+                    // round route1 and route2 points to 0 decimal places
+                    let mut segment = segment.clone();
+                    if let Some(ref mut route1) = segment.route1 {
+                        for point in route1.iter_mut() {
+                            point.x = (point.x).round();
+                            point.y = (point.y).round();
+                            point.z = (point.z).round();
+                        }
+                    }
+                    if let Some(ref mut route2) = segment.route2 {
+                        for point in route2 {
+                            point.x = (point.x).round();
+                            point.y = (point.y).round();
+                            point.z = (point.z).round();
+                        }
+                    }
+
+                    let file = toml::ser::to_string_pretty(&segment).unwrap();
                     let path = self
                         .editor_data
                         .segments_folder
@@ -212,11 +238,13 @@ impl TemplateApp {
         // horizontal layout for select all and deselect all buttons
         ui.horizontal(|ui| {
             if ui.button("Select all").clicked() {
+                self.editor_data.current_segment = None;
                 for segment in self.editor_data.segments.values_mut() {
                     segment.selected = true;
                 }
             }
             if ui.button("Deselect all").clicked() {
+                self.editor_data.current_segment = None;
                 for segment in self.editor_data.segments.values_mut() {
                     segment.selected = false;
                 }
@@ -224,20 +252,30 @@ impl TemplateApp {
         });
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for (id, segment) in self.editor_data.segments.iter_mut() {
+            // get sorted keys
+            let mut keys: Vec<String> = self.editor_data.segments.keys().cloned().collect();
+            keys.sort();
+
+            for id in keys {
+                let segment = self.editor_data.segments.get_mut(&id).unwrap();
+
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut segment.selected, "Select");
 
                     // if is current selected segment, highlight it
-                    if self.editor_data.selected_segment == Some(id.clone()) {
+                    if self.editor_data.current_segment == Some(id.clone()) {
                         ui.visuals_mut().override_text_color = Some(egui::Color32::RED);
                     } else {
                         ui.visuals_mut().override_text_color = None;
                     }
 
-                    if ui.button(format!("Edit {}", id)).clicked() {
-                        // select the segment
-                        self.editor_data.selected_segment = Some(id.clone());
+                    if ui.button(id.clone()).clicked() {
+                        // set the current segment to the selected one otherwise set to None
+                        if self.editor_data.current_segment.is_none() {
+                            self.editor_data.current_segment = Some(id.clone());
+                        } else {
+                            self.editor_data.current_segment = None;
+                        }
                     }
                 });
             }
