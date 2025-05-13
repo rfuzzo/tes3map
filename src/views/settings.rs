@@ -170,6 +170,11 @@ impl TemplateApp {
         ui.checkbox(&mut self.ui_data.realtime_update, "Realtime update");
 
         let mut changed = false;
+
+        if ui.checkbox(&mut settings.grayscale, "Grayscale").changed() {
+            changed = true;
+        }
+
         if ui
             .color_edit_button_srgba(&mut settings.height_base)
             .changed()

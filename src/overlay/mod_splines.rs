@@ -68,5 +68,19 @@ pub fn get_segments_shapes(
             shapes.push(line);
         }
     }
+
+    // ports
+    for (_name, port) in editor_data.ports.iter() {
+        for data in port.data.values() {
+            let pos2 = Pos2::new(data.position.x, data.position.y);
+            let canvas_pos = dimensions.engine_to_canvas(pos2);
+            let center = to_screen * canvas_pos;
+            let radius = 2.0;
+
+            let dot = Shape::circle_filled(center, radius * zoom, Color32::BLUE);
+            shapes.push(dot);
+        }
+    }
+
     shapes
 }

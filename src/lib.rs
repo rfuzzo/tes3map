@@ -77,12 +77,16 @@ pub struct HeightmapSettings {
     pub depth_base: Color32,  // heightmap
     pub height_spectrum: i32, // heightmap
     pub height_base: Color32, // heightmap
+
+    pub grayscale: bool, // heightmap
 }
 
 impl Default for HeightmapSettings {
     fn default() -> Self {
         Self {
             // heightmap
+            grayscale: false,
+
             height_spectrum: -120,
             height_base: Color32::from_rgb(0, 204, 0), // HSV(120,100,80)
 
