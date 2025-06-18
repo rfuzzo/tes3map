@@ -65,8 +65,6 @@ pub struct RouteId {
 pub struct Segment {
     pub id: String,
     pub route1: Option<Vec<Pos3>>,
-    pub route2: Option<Vec<Pos3>>,
-    pub segments: Option<Vec<Segment>>,
 
     // runtime data
     #[serde(skip)]
@@ -244,17 +242,10 @@ impl TemplateApp {
                     // save segments to folder
                     for (_, segment) in self.editor_data.segments.iter().filter(|(_, s)| s.selected)
                     {
-                        // round route1 and route2 points to 0 decimal places
+                        // round route1 points to 0 decimal places
                         let mut segment = segment.clone();
                         if let Some(ref mut route1) = segment.route1 {
                             for point in route1.iter_mut() {
-                                point.x = (point.x).round();
-                                point.y = (point.y).round();
-                                point.z = (point.z).round();
-                            }
-                        }
-                        if let Some(ref mut route2) = segment.route2 {
-                            for point in route2 {
                                 point.x = (point.x).round();
                                 point.y = (point.y).round();
                                 point.z = (point.z).round();

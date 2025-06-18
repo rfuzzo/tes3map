@@ -37,8 +37,6 @@ pub fn get_segments_shapes(
             }
         }
 
-        // TODO get route2 points
-
         for point in points.iter() {
             let pos2 = Pos2::new(point[0], point[1]);
             let canvas_pos = dimensions.engine_to_canvas(pos2);

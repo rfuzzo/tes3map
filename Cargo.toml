@@ -23,7 +23,8 @@ seahash = "4.1"
 
 [dependencies.tes3]
 git = "https://github.com/Greatness7/tes3"
-branch = "dev"
+default-features = false
+features = ["esp"]                         # add "nif" only if you need it
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
