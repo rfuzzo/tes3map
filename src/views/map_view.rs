@@ -1,6 +1,6 @@
 use eframe::emath::{pos2, Pos2, Rect, RectTransform};
 use eframe::epaint::{Color32, Shape, Stroke};
-use egui::{CornerRadius, Sense, StrokeKind};
+use egui::{CornerRadius, Response, Sense, StrokeKind};
 use log::info;
 
 use crate::app::TooltipInfo;
@@ -169,7 +169,7 @@ impl TemplateApp {
         // hover
         if let Some(pointer_pos) = response.hover_pos() {
             if !self.editor_data.enabled {
-                self.on_hover(ui, from_screen, pointer_pos);
+                self.on_hover(ui, &response, from_screen, pointer_pos);
             } else {
                 // context menu for editor mode
                 // get point
@@ -181,30 +181,25 @@ impl TemplateApp {
                         // get the route
                         if let Some(route1) = &mut segment.route1 {
                             if self.ui_data.show_tooltips && ui.ui_contains_pointer() {
-                                egui::show_tooltip(
-                                    ui.ctx(),
-                                    ui.layer_id(),
-                                    egui::Id::new("hover_tooltip"),
-                                    |ui| {
-                                        ui.set_width(200.0);
+                                response.clone().on_hover_ui_at_pointer(|ui| {
+                                    ui.set_width(200.0);
 
-                                        // labels
-                                        ui.label(format!("Segment: {}", id));
-                                        ui.label(format!("Point: {}", route1[i]));
+                                    // labels
+                                    ui.label(format!("Segment: {}", id));
+                                    ui.label(format!("Point: {}", route1[i]));
 
-                                        ui.separator();
+                                    ui.separator();
 
-                                        ui.label("Ctrl + Click to remove point".to_string());
-                                        ui.label("Ctrl + Drag to move point".to_string());
-                                        ui.label("Click to select segment".to_string());
-                                        ui.label("Ctrl + Click to add point".to_string());
-                                    },
-                                );
+                                    ui.label("Ctrl + Click to remove point".to_string());
+                                    ui.label("Ctrl + Drag to move point".to_string());
+                                    ui.label("Click to select segment".to_string());
+                                    ui.label("Ctrl + Click to add point".to_string());
+                                });
                             }
                         }
                     }
                 } else {
-                    self.on_hover(ui, from_screen, pointer_pos);
+                    self.on_hover(ui, &response, from_screen, pointer_pos);
                 }
             }
         }
@@ -281,7 +276,13 @@ impl TemplateApp {
         }
     }
 
-    fn on_hover(&mut self, ui: &mut egui::Ui, from_screen: RectTransform, pointer_pos: Pos2) {
+    fn on_hover(
+        &mut self,
+        ui: &mut egui::Ui,
+        response: &Response,
+        from_screen: RectTransform,
+        pointer_pos: Pos2,
+    ) {
         let key = self.cellkey_from_screen(from_screen, pointer_pos);
         self.runtime_data.hover_pos = key;
 
@@ -327,42 +328,37 @@ impl TemplateApp {
         self.runtime_data.info = tooltipinfo;
 
         if self.ui_data.show_tooltips && ui.ui_contains_pointer() {
-            egui::show_tooltip(
-                ui.ctx(),
-                ui.layer_id(),
-                egui::Id::new("hover_tooltip"),
-                |ui| {
-                    ui.set_width(200.0);
+            response.clone().on_hover_ui_at_pointer(|ui| {
+                ui.set_width(200.0);
 
-                    let info = self.runtime_data.info.clone();
-                    ui.label(format!("{:?} - {}", info.key, info.cell_name));
-                    ui.label(format!("Region: {}", info.region));
+                let info = self.runtime_data.info.clone();
+                ui.label(format!("{:?} - {}", info.key, info.cell_name));
+                ui.label(format!("Region: {}", info.region));
 
-                    // only show if current background is heightmap
-                    if self.ui_data.background == EBackground::HeightMap {
-                        ui.label("________");
-                        ui.label(format!("Height: {}", info.height));
-                    }
+                // only show if current background is heightmap
+                if self.ui_data.background == EBackground::HeightMap {
+                    ui.label("________");
+                    ui.label(format!("Height: {}", info.height));
+                }
 
-                    // show conflicts
-                    if self.ui_data.overlay_conflicts && !info.conflicts.is_empty() {
-                        ui.label("________");
-                        ui.label("Conflicts:");
-                        for conflict in info.conflicts {
-                            // lookup plugin name by conflict id
-                            if let Some(plugin) = self
-                                .plugins
-                                .as_ref()
-                                .unwrap()
-                                .iter()
-                                .find(|p| p.hash == conflict)
-                            {
-                                ui.label(format!("  - {}", plugin.get_name()));
-                            }
+                // show conflicts
+                if self.ui_data.overlay_conflicts && !info.conflicts.is_empty() {
+                    ui.label("________");
+                    ui.label("Conflicts:");
+                    for conflict in info.conflicts {
+                        // lookup plugin name by conflict id
+                        if let Some(plugin) = self
+                            .plugins
+                            .as_ref()
+                            .unwrap()
+                            .iter()
+                            .find(|p| p.hash == conflict)
+                        {
+                            ui.label(format!("  - {}", plugin.get_name()));
                         }
                     }
-                },
-            );
+                }
+            });
         }
     }
 
@@ -370,12 +366,12 @@ impl TemplateApp {
         if ui.button("Reset zoom").clicked() {
             self.reset_pan();
             self.reset_zoom();
-            ui.close_menu();
+            ui.close_kind(egui::UiKind::Menu);
         }
 
         if ui.button("Paint selected cells").clicked() {
             self.paint_cells(ctx);
-            ui.close_menu();
+            ui.close_kind(egui::UiKind::Menu);
         }
 
         ui.separator();
@@ -388,7 +384,7 @@ impl TemplateApp {
                 }
             }
 
-            ui.close_menu();
+            ui.close_kind(egui::UiKind::Menu);
         }
     }
 
@@ -433,6 +429,7 @@ impl TemplateApp {
                             route1[*i] = Pos3::new(engine_pos.x, engine_pos.y, 0.0);
 
                             // check if the point is close to another point in a different segment
+                            // and snap to it
                             for (id, segment) in self.editor_data.segments.iter_mut() {
                                 // continue if segment is not selected
                                 if !segment.selected {

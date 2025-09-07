@@ -141,8 +141,8 @@ pub fn get_overlay_path_image(
         }
     }
 
-    ColorImage {
-        pixels: color_map_to_pixels(dimensions, color_map),
-        size: dimensions.pixel_size_tuple(VERTEX_CNT),
-    }
+    ColorImage::new(
+        dimensions.pixel_size_tuple(VERTEX_CNT),
+        color_map_to_pixels(dimensions, color_map),
+    )
 }

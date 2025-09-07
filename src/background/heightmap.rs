@@ -93,7 +93,7 @@ pub fn generate_heightmap(
     settings: &HeightmapSettings,
 ) -> ColorImage {
     let size = dimensions.pixel_size_tuple(VERTEX_CNT);
-    let mut img = ColorImage::new(size, Color32::WHITE);
+    let mut img = ColorImage::filled(size, Color32::WHITE);
     let p = pixels
         .iter()
         .map(|f| get_color_for_height(*f, dimensions, settings))

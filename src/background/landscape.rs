@@ -126,8 +126,5 @@ pub fn compute_landscape_image(
         }
     }
 
-    ColorImage {
-        size: d.pixel_size_tuple(cell_size),
-        pixels: pixels_color,
-    }
+    ColorImage::new(d.pixel_size_tuple(cell_size), pixels_color)
 }
