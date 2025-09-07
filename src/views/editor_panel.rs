@@ -24,6 +24,7 @@ pub struct EditorData {
     #[serde(skip)]
     pub ports: HashMap<String, Port>,
 
+    /// (segment id, point index)
     #[serde(skip)]
     pub selected_point: Option<(String, usize)>,
     #[serde(skip)]
@@ -147,7 +148,14 @@ impl TemplateApp {
         ui.separator();
 
         // load button
-        if ui.button("Load routes").clicked() {
+        if ui
+            .button(
+                egui::RichText::new("Load routes")
+                    .color(egui::Color32::DARK_GREEN)
+                    .strong(),
+            )
+            .clicked()
+        {
             self.editor_data.current_segment = None;
 
             // load routes from folder
@@ -187,7 +195,7 @@ impl TemplateApp {
             if let Ok(entries) = read_dir(self.editor_data.ports_folder()) {
                 for entry in entries.flatten() {
                     if let Ok(file) = read_to_string(entry.path()) {
-                        // parse the file as a segment
+                        // parse the file as a port
                         match toml::de::from_str::<Port>(&file) {
                             Ok(port) => {
                                 let name = entry
@@ -275,6 +283,40 @@ impl TemplateApp {
             ui.collapsing("Routes", |ui| {
                 for route in &self.editor_data.routes {
                     ui.horizontal(|ui| {
+                        // Determine if exactly this route is active (all its segments selected, none others)
+                        let route_seg_set: std::collections::HashSet<&String> =
+                            route.segments.iter().collect();
+
+                        let all_in_route_selected = route.segments.iter().all(
+                            |id| matches!(self.editor_data.segments.get(id), Some(s) if s.selected),
+                        );
+                        let any_outside_selected = self
+                            .editor_data
+                            .segments
+                            .iter()
+                            .any(|(id, s)| !route_seg_set.contains(id) && s.selected);
+
+                        let mut checked = all_in_route_selected && !any_outside_selected;
+                        if ui.checkbox(&mut checked, "").changed() {
+                            // Exclusive selection: if checked, enable only this route's segments; if unchecked, disable all
+                            if checked {
+                                self.editor_data.current_segment = None;
+                                for (_id, seg) in self.editor_data.segments.iter_mut() {
+                                    seg.selected = false;
+                                }
+                                for seg_id in &route.segments {
+                                    if let Some(seg) = self.editor_data.segments.get_mut(seg_id) {
+                                        seg.selected = true;
+                                    }
+                                }
+                            } else {
+                                for (_id, seg) in self.editor_data.segments.iter_mut() {
+                                    seg.selected = false;
+                                }
+                                self.editor_data.current_segment = None;
+                            }
+                        }
+
                         let name = format!(
                             "{} -> {} ({})",
                             route.id.start, route.id.destination, route.id.service

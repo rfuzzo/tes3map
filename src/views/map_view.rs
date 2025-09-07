@@ -406,42 +406,42 @@ impl TemplateApp {
     fn on_point_dragged(&mut self, from_screen: RectTransform, current_pos: Pos2) {
         // move the selected point if in editor mode
         if self.editor_data.enabled {
-            if let Some((s, i)) = &self.editor_data.selected_point {
+            if let Some((selected_point, i)) = &self.editor_data.selected_point {
                 // get the segment
-                if let Some(segment) = self.editor_data.segments.get_mut(s) {
+                if let Some(segment) = self.editor_data.segments.get_mut(selected_point) {
                     // get the route
                     if let Some(route1) = &mut segment.route1 {
                         // get the point
                         if let Some(_point) = route1.get_mut(*i) {
                             // translate the point to screen space
                             let clicked_point = from_screen * current_pos;
-
                             let engine_pos = self
                                 .dimensions
                                 .canvas_to_engine(Pos2::new(clicked_point.x, clicked_point.y));
 
-                            // // TODO if points overlap, remove the point
-                            // // check if the point is too close to another point
-                            // let mut min_dist = f32::MAX;
-                            // let mut min_index = 0;
-                            // for (i, point) in route1.iter().enumerate() {
-                            //     let dist = (engine_pos - Pos2::new(point.x, point.y)).length();
-                            //     if dist < min_dist {
-                            //         min_dist = dist;
-                            //         min_index = i;
-                            //     }
-                            // }
-                            // // if the point is too close to another point, remove it
-                            // if min_index != *i && min_dist < 600.0 {
-                            //     // remove the point
-                            //     route1.remove(*i);
-                            //     self.editor_data.selected_point = None;
-                            // } else {
-                            //     // update the point
-                            //     route1[*i] = Pos3::new(engine_pos.x, engine_pos.y, 0.0);
-                            // }
+                            // move the point
 
-                            route1[*i] = Pos3::new(engine_pos.x, engine_pos.y, 0.0);
+                            // snap to port points but don't change the port
+                            let mut move_point = true;
+                            for (_name, port) in self.editor_data.ports.iter_mut() {
+                                for data in port.data.values_mut() {
+                                    let port_pos = Pos2::new(data.position.x, data.position.y);
+                                    let dist = (engine_pos - port_pos).length();
+                                    if dist < 600.0 {
+                                        // do not change the port position, just snap the point to it
+                                        _point.x = port_pos.x;
+                                        _point.y = port_pos.y;
+
+                                        move_point = false;
+                                    }
+                                }
+                            }
+
+                            if move_point {
+                                // move the point
+                                _point.x = engine_pos.x;
+                                _point.y = engine_pos.y;
+                            }
 
                             // check if the point is close to another point in a different segment
                             // and snap to it
@@ -451,7 +451,7 @@ impl TemplateApp {
                                     continue;
                                 }
 
-                                if id != s {
+                                if id != selected_point {
                                     if let Some(route1) = &mut segment.route1 {
                                         for point in route1.iter_mut() {
                                             let dist =
