@@ -1,4 +1,4 @@
-use eframe::emath::{pos2, Pos2, Rect, RectTransform};
+use eframe::emath::{pos2, vec2, Pos2, Rect, RectTransform, Vec2};
 use eframe::epaint::{Color32, Shape, Stroke};
 use egui::{CornerRadius, Response, Sense, StrokeKind};
 use log::info;
@@ -63,29 +63,43 @@ impl TemplateApp {
         let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(real_width, real_height));
         let height_ratio = real_height / real_width;
 
-        // apply zoom
+        // viewport and base (unzoomed) canvas size derived from viewport width to preserve aspect
+        let viewport = response.rect;
+        let base_size: Vec2 = vec2(viewport.width(), viewport.width() * height_ratio);
+
+        // current canvas using existing zoom
+        let mut min = self.transform_data.drag_offset;
+        let mut size = base_size * self.transform_data.zoom;
+        let mut canvas = Rect::from_min_size(min, size);
+        let mut to_screen = RectTransform::from_to(from, canvas);
+        let mut from_screen = to_screen.inverse();
+
+        // apply zoom (anchor at mouse position to avoid drift)
         if let Some(z) = self.transform_data.zoom_delta.take() {
-            let r = z - 1.0;
-            let mut current_zoom = self.transform_data.zoom;
-            current_zoom += r;
-            if current_zoom > 0.0 {
-                self.transform_data.zoom = current_zoom;
+            // compute the content position under the cursor BEFORE changing zoom
+            let anchor_screen = response.hover_pos().unwrap_or(viewport.center());
+            let anchor_world = from_screen * anchor_screen; // in content coords (0..real_width/height)
 
-                // if let Some(pointer_pos) = response.hover_pos() {
-                //     let d = pointer_pos * r;
-                //     self.transform_data.drag_offset -= d.to_vec2();
-                // }
-            }
+            // multiplicative zoom feels smoother; clamp to a sane minimum
+            let new_zoom = (self.transform_data.zoom * z).max(0.05);
+            self.transform_data.zoom = new_zoom;
+
+            // recompute size and adjust offset so that anchor_world stays under the cursor
+            size = base_size * self.transform_data.zoom;
+            let scale_x = size.x / real_width;
+            let scale_y = size.y / real_height;
+            let new_min = pos2(
+                anchor_screen.x - anchor_world.x * scale_x,
+                anchor_screen.y - anchor_world.y * scale_y,
+            );
+            self.transform_data.drag_offset = new_min;
+
+            // rebuild transforms with updated zoom and offset
+            min = self.transform_data.drag_offset;
+            canvas = Rect::from_min_size(min, size);
+            to_screen = RectTransform::from_to(from, canvas);
+            from_screen = to_screen.inverse();
         }
-
-        let min = self.transform_data.drag_offset;
-        let max = Pos2::new(response.rect.max.x, response.rect.max.x * height_ratio)
-            * self.transform_data.zoom
-            + self.transform_data.drag_offset.to_vec2();
-        let canvas = Rect::from_min_max(min, max);
-
-        let to_screen = RectTransform::from_to(from, canvas);
-        let from_screen = to_screen.inverse();
 
         // paint maps
 
