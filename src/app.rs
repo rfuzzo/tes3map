@@ -39,7 +39,7 @@ pub struct TemplateApp {
 
     // ui
     #[serde(skip)]
-    pub zoom_data: ZoomData,
+    pub transform_data: TransformData,
     #[serde(skip)]
     pub dimensions: Dimensions,
 
@@ -273,13 +273,13 @@ impl TemplateApp {
 
     // UI methods
     pub fn reset_zoom(&mut self) {
-        self.zoom_data.zoom = 1.0;
+        self.transform_data.zoom = 1.0;
     }
 
     pub fn reset_pan(&mut self) {
-        self.zoom_data.drag_delta = None;
-        self.zoom_data.drag_offset = Pos2::default();
-        self.zoom_data.drag_start = Pos2::default();
+        self.transform_data.drag_delta = None;
+        self.transform_data.drag_offset = Pos2::default();
+        self.transform_data.drag_start = Pos2::default();
     }
 
     pub fn save_image(&mut self, ctx: &egui::Context) -> Result<(), ImageError> {

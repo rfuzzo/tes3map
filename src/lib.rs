@@ -133,7 +133,7 @@ pub struct RuntimeData {
 }
 
 #[derive(Debug, Clone)]
-pub struct ZoomData {
+pub struct TransformData {
     drag_start: Pos2,
     drag_delta: Option<Pos2>,
     drag_offset: Pos2,
@@ -142,7 +142,7 @@ pub struct ZoomData {
     zoom_delta: Option<f32>,
 }
 
-impl Default for ZoomData {
+impl Default for TransformData {
     fn default() -> Self {
         Self {
             drag_start: Default::default(),

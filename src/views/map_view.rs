@@ -52,34 +52,36 @@ impl TemplateApp {
         let (response, painter) =
             ui.allocate_painter(ui.available_size_before_wrap(), Sense::click_and_drag());
 
-        // zoom
-        if let Some(delta) = self.zoom_data.drag_delta.take() {
-            self.zoom_data.drag_offset += delta.to_vec2();
-        }
-
-        if let Some(z) = self.zoom_data.zoom_delta.take() {
-            let r = z - 1.0;
-            let mut current_zoom = self.zoom_data.zoom;
-            current_zoom += r;
-            if current_zoom > 0.0 {
-                self.zoom_data.zoom = current_zoom;
-
-                if let Some(pointer_pos) = response.hover_pos() {
-                    let d = pointer_pos * r;
-                    self.zoom_data.drag_offset -= d.to_vec2();
-                }
-            }
+        // drag
+        if let Some(delta) = self.transform_data.drag_delta.take() {
+            self.transform_data.drag_offset += delta.to_vec2();
         }
 
         // transforms
         let real_width = self.dimensions.width() as f32;
         let real_height = self.dimensions.height() as f32;
         let from: Rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(real_width, real_height));
-        let r = real_height / real_width;
+        let height_ratio = real_height / real_width;
 
-        let min = self.zoom_data.drag_offset;
-        let max = Pos2::new(response.rect.max.x, response.rect.max.x * r) * self.zoom_data.zoom
-            + self.zoom_data.drag_offset.to_vec2();
+        // apply zoom
+        if let Some(z) = self.transform_data.zoom_delta.take() {
+            let r = z - 1.0;
+            let mut current_zoom = self.transform_data.zoom;
+            current_zoom += r;
+            if current_zoom > 0.0 {
+                self.transform_data.zoom = current_zoom;
+
+                // if let Some(pointer_pos) = response.hover_pos() {
+                //     let d = pointer_pos * r;
+                //     self.transform_data.drag_offset -= d.to_vec2();
+                // }
+            }
+        }
+
+        let min = self.transform_data.drag_offset;
+        let max = Pos2::new(response.rect.max.x, response.rect.max.x * height_ratio)
+            * self.transform_data.zoom
+            + self.transform_data.drag_offset.to_vec2();
         let canvas = Rect::from_min_max(min, max);
 
         let to_screen = RectTransform::from_to(from, canvas);
@@ -135,7 +137,7 @@ impl TemplateApp {
             let shapes = overlay::mod_splines::get_segments_shapes(
                 to_screen,
                 &self.dimensions,
-                self.zoom_data.zoom,
+                self.transform_data.zoom,
                 &self.editor_data,
                 &response.hover_pos(),
             );
@@ -214,7 +216,7 @@ impl TemplateApp {
                 if ui.ctx().input(|i| i.modifiers.ctrl) {
                     self.on_ctrl_drag_started(from_screen, drag_start);
                 } else {
-                    self.zoom_data.drag_start = drag_start;
+                    self.transform_data.drag_start = drag_start;
                 }
             }
         } else if response.dragged() {
@@ -222,18 +224,17 @@ impl TemplateApp {
                 if ui.ctx().input(|i| i.modifiers.ctrl) {
                     self.on_point_dragged(from_screen, current_pos);
                 } else {
-                    let delta = current_pos - self.zoom_data.drag_start.to_vec2();
-                    self.zoom_data.drag_delta = Some(delta);
-                    self.zoom_data.drag_start = current_pos;
+                    let delta = current_pos - self.transform_data.drag_start.to_vec2();
+                    self.transform_data.drag_delta = Some(delta);
+                    self.transform_data.drag_start = current_pos;
                 }
             }
         }
 
-        // zoom
+        // set zoom
         let delta = ctx.input(|i| i.zoom_delta());
-        // let delta = response.input(|i| i.zoom_delta());
         if delta != 1.0 {
-            self.zoom_data.zoom_delta = Some(delta);
+            self.transform_data.zoom_delta = Some(delta);
         }
         if response.middle_clicked() {
             self.reset_zoom();
