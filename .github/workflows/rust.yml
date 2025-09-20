@@ -21,6 +21,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build
-        run: cargo build --${{ matrix.build_type }}
+        run: cargo build
       - name: Check
         run: cargo check --all-features
