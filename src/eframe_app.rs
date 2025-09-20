@@ -19,25 +19,40 @@ impl eframe::App for TemplateApp {
 
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             // The top panel is often a good place for a menu bar:
-            egui::menu::bar(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("Quit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
 
+                ui.menu_button("Mod Specific", |ui| {
+                    let mut enabled = self.editor_data.enabled;
+                    if ui.checkbox(&mut enabled, "Immersive Travel").changed() {
+                        self.editor_data.enabled = enabled;
+                    }
+                });
+
                 ui.menu_button("Help", |ui| {
+                    // version and name
+                    ui.label(format!("{} {}", NAME, VERSION));
+                    ui.separator();
+
+                    // repo link
                     if ui
                         .hyperlink_to("Github repo", "https://github.com/rfuzzo/tes3map")
                         .clicked()
                     {
-                        ui.close_menu();
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                 });
 
-                ui.add_space(16.0);
-
-                egui::widgets::global_theme_preference_buttons(ui);
+                // align to right
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    egui::widgets::global_theme_preference_buttons(ui);
+                    ui.label("Theme:");
+                    ui.add_space(32.0);
+                });
             });
         });
 
@@ -51,12 +66,22 @@ impl eframe::App for TemplateApp {
                     "Plugins",
                 );
                 ui.selectable_value(&mut self.side_panel_view, ESidePanelView::Cells, "Cells");
+
+                // only show editor tab if enabled
+                if self.editor_data.enabled {
+                    ui.selectable_value(
+                        &mut self.side_panel_view,
+                        ESidePanelView::Editor,
+                        "Editor",
+                    );
+                }
             });
 
             match self.side_panel_view {
                 // view
                 app::ESidePanelView::Plugins => self.plugins_panel(ui, ctx),
                 app::ESidePanelView::Cells => self.cell_panel(ui, ctx),
+                app::ESidePanelView::Editor => self.editor_panel(ui, ctx),
             }
         });
 

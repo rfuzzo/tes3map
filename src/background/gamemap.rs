@@ -41,10 +41,7 @@ pub fn generate_map(
 
     pixels.reverse();
 
-    ColorImage {
-        pixels,
-        size: [width, height],
-    }
+    ColorImage::new([width, height], pixels)
 }
 
 /// https://github.com/NullCascade/morrowind-mods/blob/master/User%20Interface%20Expansion/plugin_source/PatchWorldMap.cpp#L158

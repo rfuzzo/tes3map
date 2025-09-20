@@ -33,6 +33,7 @@ mod views;
 const GRID_SIZE: usize = 16;
 const VERTEX_CNT: usize = 65;
 const DEFAULT_COLOR: Color32 = Color32::TRANSPARENT;
+const CELL_WIDTH: f32 = 8192_f32;
 
 type CellKey = (i32, i32);
 type ImageBuffer = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;
@@ -76,12 +77,16 @@ pub struct HeightmapSettings {
     pub depth_base: Color32,  // heightmap
     pub height_spectrum: i32, // heightmap
     pub height_base: Color32, // heightmap
+
+    pub grayscale: bool, // heightmap
 }
 
 impl Default for HeightmapSettings {
     fn default() -> Self {
         Self {
             // heightmap
+            grayscale: false,
+
             height_spectrum: -120,
             height_base: Color32::from_rgb(0, 204, 0), // HSV(120,100,80)
 
@@ -103,8 +108,8 @@ pub struct SavedData {
     pub overlay_region: bool,
     pub overlay_grid: bool,
     pub overlay_cities: bool,
-    pub overlay_travel: bool,
     pub overlay_conflicts: bool,
+    pub overlay_travel: HashMap<String, bool>, // travel class
 
     pub show_tooltips: bool,
 
@@ -128,7 +133,7 @@ pub struct RuntimeData {
 }
 
 #[derive(Debug, Clone)]
-pub struct ZoomData {
+pub struct TransformData {
     drag_start: Pos2,
     drag_delta: Option<Pos2>,
     drag_offset: Pos2,
@@ -137,7 +142,7 @@ pub struct ZoomData {
     zoom_delta: Option<f32>,
 }
 
-impl Default for ZoomData {
+impl Default for TransformData {
     fn default() -> Self {
         Self {
             drag_start: Default::default(),
@@ -448,8 +453,8 @@ fn height_map_to_pixel_heights(
                 // look up heightmap
                 for (y, row) in heights.iter().rev().enumerate() {
                     for (x, value) in row.iter().enumerate() {
-                        let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
-                        let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
+                        let tx = VERTEX_CNT * dimensions.cell_to_canvas_x(cx) + x;
+                        let ty = VERTEX_CNT * dimensions.cell_to_canvas_y(cy) + y;
 
                         let i = (ty * dimensions.stride(VERTEX_CNT)) + tx;
                         pixels[i] = *value;
@@ -458,8 +463,8 @@ fn height_map_to_pixel_heights(
             } else {
                 for y in 0..VERTEX_CNT {
                     for x in 0..VERTEX_CNT {
-                        let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx) + x;
-                        let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy) + y;
+                        let tx = VERTEX_CNT * dimensions.cell_to_canvas_x(cx) + x;
+                        let ty = VERTEX_CNT * dimensions.cell_to_canvas_y(cy) + y;
 
                         let i = (ty * dimensions.stride(VERTEX_CNT)) + tx;
                         pixels[i] = min_z - 1_f32;
@@ -484,7 +489,7 @@ pub fn height_from_screen_space(
 }
 
 fn get_rect_at_cell(dimensions: &Dimensions, to_screen: RectTransform, key: CellKey) -> Rect {
-    let p00 = dimensions.tranform_to_canvas(key);
+    let p00 = dimensions.cell_to_canvas(key);
     let p11 = Pos2::new(p00.x + 1.0, p00.y + 1.0);
     Rect::from_two_pos(to_screen * p00, to_screen * p11)
 }

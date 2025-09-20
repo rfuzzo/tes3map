@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use egui::{epaint::ColorMode, pos2, ColorImage, Pos2, Shape};
+use egui::{pos2, ColorImage, Pos2, Shape};
 use image::{imageops, ImageError};
 use log::{debug, error};
 use tes3::esp::{Landscape, Region};
@@ -17,6 +17,7 @@ pub enum ESidePanelView {
     #[default]
     Plugins,
     Cells,
+    Editor,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -34,10 +35,11 @@ pub struct TooltipInfo {
 pub struct TemplateApp {
     pub data_files: Option<PathBuf>,
     pub ui_data: SavedData,
+    pub editor_data: views::editor_panel::EditorData,
 
     // ui
     #[serde(skip)]
-    pub zoom_data: ZoomData,
+    pub transform_data: TransformData,
     #[serde(skip)]
     pub dimensions: Dimensions,
 
@@ -271,13 +273,13 @@ impl TemplateApp {
 
     // UI methods
     pub fn reset_zoom(&mut self) {
-        self.zoom_data.zoom = 1.0;
+        self.transform_data.zoom = 1.0;
     }
 
     pub fn reset_pan(&mut self) {
-        self.zoom_data.drag_delta = None;
-        self.zoom_data.drag_offset = Pos2::default();
-        self.zoom_data.drag_start = Pos2::default();
+        self.transform_data.drag_delta = None;
+        self.transform_data.drag_offset = Pos2::default();
+        self.transform_data.drag_start = Pos2::default();
     }
 
     pub fn save_image(&mut self, ctx: &egui::Context) -> Result<(), ImageError> {
@@ -358,7 +360,7 @@ impl TemplateApp {
                 let any_overlay = self.ui_data.overlay_region
                     || self.ui_data.overlay_grid
                     || self.ui_data.overlay_cities
-                    || self.ui_data.overlay_travel
+                    || self.ui_data.overlay_travel.values().any(|v| *v)
                     || self.ui_data.overlay_conflicts;
 
                 if any_overlay {
@@ -402,14 +404,20 @@ impl TemplateApp {
                         all_shapes.extend(shapes);
                     }
                     // travel
-                    if self.ui_data.overlay_travel {
-                        let shapes = overlay::travel::get_travel_shapes(
-                            transform,
-                            &self.dimensions,
-                            &self.travel_edges,
-                        );
-                        all_shapes.extend(shapes);
+                    for class in self.travel_edges.keys() {
+                        if let Some(class_option) = self.ui_data.overlay_travel.get(class) {
+                            if *class_option {
+                                let shapes = overlay::travel::get_travel_shapes(
+                                    transform,
+                                    &self.dimensions,
+                                    &self.travel_edges,
+                                    class,
+                                );
+                                all_shapes.extend(shapes);
+                            }
+                        }
                     }
+
                     // conflicts
                     if self.ui_data.overlay_conflicts {
                         let shapes = overlay::conflicts::get_conflict_shapes(
@@ -478,37 +486,35 @@ impl TemplateApp {
                             }
                             // TODO fix lines
                             Shape::LineSegment { points, stroke } => {
-                                if let ColorMode::Solid(color) = stroke.color {
-                                    let stroke_width = stroke.width;
-                                    for i in 0..points.len() - 1 {
-                                        let p1 = points[i];
-                                        let p2 = points[i + 1];
+                                let stroke_width = stroke.width;
+                                for i in 0..points.len() - 1 {
+                                    let p1 = points[i];
+                                    let p2 = points[i + 1];
 
-                                        let img = ImageBuffer::from_fn(
-                                            (p1.distance(p2) + 1.0) as u32,
-                                            stroke_width as u32,
-                                            |x, _y| {
-                                                if x < stroke_width as u32 {
-                                                    image::Rgba([
-                                                        color.r(),
-                                                        color.g(),
-                                                        color.b(),
-                                                        color.a(),
-                                                    ])
-                                                } else {
-                                                    image::Rgba([0, 0, 0, 0])
-                                                }
-                                            },
-                                        );
+                                    let img = ImageBuffer::from_fn(
+                                        (p1.distance(p2) + 1.0) as u32,
+                                        stroke_width as u32,
+                                        |x, _y| {
+                                            if x < stroke_width as u32 {
+                                                image::Rgba([
+                                                    stroke.color.r(),
+                                                    stroke.color.g(),
+                                                    stroke.color.b(),
+                                                    stroke.color.a(),
+                                                ])
+                                            } else {
+                                                image::Rgba([0, 0, 0, 0])
+                                            }
+                                        },
+                                    );
 
-                                        let min = Pos2::new(p1.x.min(p2.x), p1.y.min(p2.y));
-                                        imageops::overlay(
-                                            &mut bg_image,
-                                            &img,
-                                            min.x as i64,
-                                            min.y as i64,
-                                        );
-                                    }
+                                    let min = Pos2::new(p1.x.min(p2.x), p1.y.min(p2.y));
+                                    imageops::overlay(
+                                        &mut bg_image,
+                                        &img,
+                                        min.x as i64,
+                                        min.y as i64,
+                                    );
                                 }
                             }
                             _ => {}

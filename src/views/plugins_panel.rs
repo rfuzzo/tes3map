@@ -133,6 +133,7 @@ impl TemplateApp {
         self.ltex_records.clear();
         self.regn_records.clear();
         self.travel_edges.clear();
+        self.ui_data.overlay_travel.clear();
         self.cell_records.clear();
         self.cell_conflicts.clear();
 
@@ -177,11 +178,13 @@ impl TemplateApp {
                     if !travel_destinations.is_empty() {
                         let mut travel_destination_cells: Vec<CellKey> = vec![];
                         for d in travel_destinations {
-                            let mut x = (d.translation[0] / 8192.0) as i32;
+                            let mut x = (d.translation[0] / CELL_WIDTH) as i32;
+                            // TODO fix this shit
                             if x < 0 {
                                 x -= 1;
                             }
-                            let mut y = (d.translation[1] / 8192.0) as i32;
+                            let mut y = (d.translation[1] / CELL_WIDTH) as i32;
+                            // TODO fix this shit
                             if y < 0 {
                                 y -= 1;
                             }
@@ -263,6 +266,7 @@ impl TemplateApp {
                 v.push(pair);
             }
         }
+        self.ui_data.overlay_travel = ordered_edges.keys().map(|k| (k.clone(), false)).collect();
         self.travel_edges = ordered_edges;
 
         // get final list of cells

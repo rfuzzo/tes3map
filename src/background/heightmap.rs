@@ -1,7 +1,14 @@
+use crate::{Dimensions, HeightmapSettings, VERTEX_CNT};
 use eframe::epaint::{Color32, ColorImage};
 use palette::{convert::FromColorUnclamped, Hsv, IntoColor, LinSrgb};
 
-use crate::{Dimensions, HeightmapSettings, VERTEX_CNT};
+fn height_to_grayscale(height: f32, dimensions: &Dimensions) -> Color32 {
+    let v = height / dimensions.max_z;
+    let intensity = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let color = LinSrgb::from_components((intensity, intensity, intensity));
+    let c: LinSrgb<u8> = color.into_format();
+    Color32::from_rgb(c.red, c.green, c.blue)
+}
 
 fn height_to_color(height: f32, dimensions: &Dimensions, settings: &HeightmapSettings) -> Color32 {
     let b: LinSrgb<u8> = LinSrgb::from_components((
@@ -56,6 +63,7 @@ fn depth_to_color(depth: f32, dimensions: &Dimensions, settings: &HeightmapSetti
     Color32::from_rgb(c.red, c.green, c.blue)
 }
 
+#[allow(clippy::collapsible_else_if)]
 fn get_color_for_height(
     value: f32,
     dimensions: &Dimensions,
@@ -65,10 +73,18 @@ fn get_color_for_height(
         return Color32::TRANSPARENT;
     }
 
-    if value < 0.0 {
-        depth_to_color(value, dimensions, settings)
+    if settings.grayscale {
+        if value < 0.0 {
+            Color32::from_black_alpha(0)
+        } else {
+            height_to_grayscale(value, dimensions)
+        }
     } else {
-        height_to_color(value, dimensions, settings)
+        if value < 0.0 {
+            depth_to_color(value, dimensions, settings)
+        } else {
+            height_to_color(value, dimensions, settings)
+        }
     }
 }
 pub fn generate_heightmap(
@@ -77,7 +93,7 @@ pub fn generate_heightmap(
     settings: &HeightmapSettings,
 ) -> ColorImage {
     let size = dimensions.pixel_size_tuple(VERTEX_CNT);
-    let mut img = ColorImage::new(size, Color32::WHITE);
+    let mut img = ColorImage::filled(size, Color32::WHITE);
     let p = pixels
         .iter()
         .map(|f| get_color_for_height(*f, dimensions, settings))

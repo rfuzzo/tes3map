@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use eframe::emath::RectTransform;
-use eframe::epaint::{Color32, Shape};
-use egui::epaint::PathStroke;
+use eframe::epaint::{Color32, Shape, Stroke};
 use egui::Vec2;
 
 use crate::dimensions::Dimensions;
@@ -22,6 +21,7 @@ pub fn get_travel_shapes(
     to_screen: RectTransform,
     dimensions: &Dimensions,
     edges: &HashMap<String, Vec<(CellKey, CellKey)>>,
+    class_name: &str,
 ) -> Vec<Shape> {
     let shapes_len = edges
         .iter()
@@ -29,16 +29,21 @@ pub fn get_travel_shapes(
     let mut shapes: Vec<Shape> = Vec::with_capacity(shapes_len);
 
     for (class, destinations) in edges.iter() {
+        // skip if not the class we are looking for
+        if class != class_name {
+            continue;
+        }
+
         // get class color
         let color = get_color_for_class(class);
 
         for (key, value) in destinations {
-            let p00 = dimensions.tranform_to_canvas(*key) + Vec2::new(0.5, 0.5);
-            let p11 = dimensions.tranform_to_canvas(*value) + Vec2::new(0.5, 0.5);
+            let p00 = dimensions.cell_to_canvas(*key) + Vec2::new(0.5, 0.5);
+            let p11 = dimensions.cell_to_canvas(*value) + Vec2::new(0.5, 0.5);
 
             let line = Shape::LineSegment {
                 points: [to_screen * p00, to_screen * p11],
-                stroke: PathStroke::new(2.0, color),
+                stroke: Stroke::new(2.0, color),
             };
             shapes.push(line);
         }

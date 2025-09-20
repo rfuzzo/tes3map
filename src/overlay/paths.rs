@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use egui::{Color32, ColorImage};
 use tes3::esp::{Landscape, LandscapeFlags};
 
-use crate::{CellKey, DEFAULT_COLOR, Dimensions, VERTEX_CNT};
+use crate::{CellKey, Dimensions, DEFAULT_COLOR, VERTEX_CNT};
 
 pub fn color_map_to_pixels(
     dimensions: &Dimensions,
@@ -22,8 +22,8 @@ pub fn color_map_to_pixels(
 
     for cy in min_y..max_y + 1 {
         for cx in min_x..max_x + 1 {
-            let tx = VERTEX_CNT * dimensions.tranform_to_canvas_x(cx);
-            let ty = VERTEX_CNT * dimensions.tranform_to_canvas_y(cy);
+            let tx = VERTEX_CNT * dimensions.cell_to_canvas_x(cx);
+            let ty = VERTEX_CNT * dimensions.cell_to_canvas_y(cy);
 
             if let Some(colors) = color_map.get(&(cx, cy)) {
                 for (y, row) in colors.iter().rev().enumerate() {
@@ -141,8 +141,8 @@ pub fn get_overlay_path_image(
         }
     }
 
-    ColorImage {
-        pixels: color_map_to_pixels(dimensions, color_map),
-        size: dimensions.pixel_size_tuple(VERTEX_CNT),
-    }
+    ColorImage::new(
+        dimensions.pixel_size_tuple(VERTEX_CNT),
+        color_map_to_pixels(dimensions, color_map),
+    )
 }

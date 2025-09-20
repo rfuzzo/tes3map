@@ -65,7 +65,15 @@ impl TemplateApp {
         ui.checkbox(&mut self.ui_data.overlay_region, "Show regions");
         ui.checkbox(&mut self.ui_data.overlay_grid, "Show cell grid");
         ui.checkbox(&mut self.ui_data.overlay_cities, "Show cities");
-        ui.checkbox(&mut self.ui_data.overlay_travel, "Show travel");
+        // travel
+        let mut keys = self.travel_edges.keys().collect::<Vec<_>>();
+        keys.sort();
+        for class in keys {
+            if let Some(class_option) = self.ui_data.overlay_travel.get_mut(class) {
+                ui.checkbox(class_option, format!("\tShow travel: {}", class));
+            }
+        }
+
         ui.checkbox(&mut self.ui_data.overlay_conflicts, "Show conflicts");
 
         ui.checkbox(&mut self.ui_data.show_tooltips, "Show tooltips");
@@ -162,6 +170,11 @@ impl TemplateApp {
         ui.checkbox(&mut self.ui_data.realtime_update, "Realtime update");
 
         let mut changed = false;
+
+        if ui.checkbox(&mut settings.grayscale, "Grayscale").changed() {
+            changed = true;
+        }
+
         if ui
             .color_edit_button_srgba(&mut settings.height_base)
             .changed()
