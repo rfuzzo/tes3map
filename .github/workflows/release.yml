@@ -6,8 +6,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: Check
+  release:
+    name: Release
     runs-on: ${{ matrix.os }}
 
     strategy:
