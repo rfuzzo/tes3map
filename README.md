@@ -1,4 +1,6 @@
 # Tes3map tools
+>
+> Nexus link: <https://www.nexusmods.com/morrowind/mods/54791>
 
 A small tool to draw a map of all loaded esps.
 
@@ -18,6 +20,8 @@ A small tool to draw a map of all loaded esps.
 - Tool tips
 - Zooming and panning
 - Image export
+- Mod specific
+  - Immersive Travel Route editor (wip)
 
 ## Usage
 
