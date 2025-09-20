@@ -5,7 +5,6 @@ use std::{
 
 use crate::fs::write;
 use egui::{ahash::HashMap, Context};
-use image::metadata;
 
 use crate::TemplateApp;
 
