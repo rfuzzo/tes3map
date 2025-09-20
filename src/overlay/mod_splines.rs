@@ -70,13 +70,23 @@ pub fn get_segments_shapes(
     // ports
     for (_name, port) in editor_data.ports.iter() {
         for data in port.data.values() {
-            let pos2 = Pos2::new(data.position.x, data.position.y);
-            let canvas_pos = dimensions.engine_to_canvas(pos2);
-            let center = to_screen * canvas_pos;
-            let radius = 2.0;
+            // start positions
+            {
+                let pos2 = Pos2::new(data.position.x, data.position.y);
+                let center = to_screen * dimensions.engine_to_canvas(pos2);
+                let dot = Shape::circle_filled(center, 2.0 * zoom, Color32::BLUE);
+                shapes.push(dot);
+            }
 
-            let dot = Shape::circle_filled(center, radius * zoom, Color32::BLUE);
-            shapes.push(dot);
+            // reverse start positions
+            {
+                if let Some(position) = &data.positionStart {
+                    let pos2 = Pos2::new(position.x, position.y);
+                    let center = to_screen * dimensions.engine_to_canvas(pos2);
+                    let dot = Shape::circle_filled(center, 2.0 * zoom, Color32::MAGENTA);
+                    shapes.push(dot);
+                }
+            }
         }
     }
 

@@ -5,8 +5,14 @@ use std::{
 
 use crate::fs::write;
 use egui::{ahash::HashMap, Context};
+use image::metadata;
 
 use crate::TemplateApp;
+
+#[derive(Debug, Clone, Default)]
+pub struct RouteMetadata {
+    pub valid: bool,
+}
 
 /// This is the editor panel for the map editor
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
@@ -15,6 +21,8 @@ pub struct EditorData {
     pub mod_folder: PathBuf,
 
     // display options
+    #[serde(skip)]
+    pub routes_metadata: HashMap<RouteId, RouteMetadata>,
 
     // runtime data
     #[serde(skip)]
@@ -54,11 +62,22 @@ pub struct Route {
 }
 
 // route id struct
-#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash)]
 pub struct RouteId {
     pub start: String,
     pub destination: String,
     pub service: String,
+}
+
+// impl format for routeID
+impl std::fmt::Display for RouteId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "({}, {}, {})",
+            self.start, self.destination, self.service
+        )
+    }
 }
 
 // segment struct
@@ -173,6 +192,42 @@ impl TemplateApp {
                 }
             }
 
+            // validate button
+            if ui
+                .button(egui::RichText::new("Validate routes").color(egui::Color32::ORANGE))
+                .clicked()
+            {
+                // validate routes
+                self.editor_data.routes_metadata.clear();
+                // go through all routes and check if the segments in the route connect
+                for route in &self.editor_data.routes {
+                    let mut metadata = RouteMetadata { valid: true };
+
+                    // check if all segments exist and put into a flat array
+                    let mut segment_vec = Vec::new();
+                    for segment in &route.segments {
+                        if let Some(segment) = self.editor_data.segments.get(segment) {
+                            segment_vec.push(segment);
+                        }
+                    }
+
+                    // validate that all segments are there
+                    if segment_vec.len() == route.segments.len() {
+                        log::info!("Route '{}' is valid", route.id);
+                    } else {
+                        log::warn!("Route '{}' is invalid", route.id);
+                        metadata.valid = false;
+                    }
+
+                    // validate that all segments connect
+                    // start with the port
+
+                    self.editor_data
+                        .routes_metadata
+                        .insert(route.id.clone(), metadata);
+                }
+            }
+
             // load segments from folder
             self.editor_data.segments.clear();
             if let Ok(entries) = read_dir(self.editor_data.segments_folder()) {
@@ -283,6 +338,17 @@ impl TemplateApp {
             ui.collapsing("Routes", |ui| {
                 for route in &self.editor_data.routes {
                     ui.horizontal(|ui| {
+                        // check if routes is invalid
+                        if let Some(metadata) = self.editor_data.routes_metadata.get(&route.id) {
+                            if !metadata.valid {
+                                ui.label("✖");
+                            } else {
+                                ui.label("✅");
+                            }
+                        } else {
+                            ui.label("❓");
+                        }
+
                         // Determine if exactly this route is active (all its segments selected, none others)
                         let route_seg_set: std::collections::HashSet<&String> =
                             route.segments.iter().collect();

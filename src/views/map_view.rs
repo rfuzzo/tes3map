@@ -419,26 +419,45 @@ impl TemplateApp {
                                 .dimensions
                                 .canvas_to_engine(Pos2::new(clicked_point.x, clicked_point.y));
 
-                            // move the point
-
                             // snap to port points but don't change the port
-                            let mut move_point = true;
-                            for (_name, port) in self.editor_data.ports.iter_mut() {
-                                for data in port.data.values_mut() {
-                                    let port_pos = Pos2::new(data.position.x, data.position.y);
-                                    let dist = (engine_pos - port_pos).length();
-                                    if dist < 600.0 {
-                                        // do not change the port position, just snap the point to it
-                                        _point.x = port_pos.x;
-                                        _point.y = port_pos.y;
+                            let mut snap_point = None;
+                            for port in self.editor_data.ports.values() {
+                                if snap_point.is_some() {
+                                    break;
+                                }
 
-                                        move_point = false;
+                                for data in port.data.values() {
+                                    // start positions
+                                    {
+                                        let port_pos = Pos2::new(data.position.x, data.position.y);
+                                        let dist = (engine_pos - port_pos).length();
+                                        if dist < 600.0 {
+                                            // do not change the port position, just snap the point to it
+                                            snap_point = Some(port_pos);
+                                            break;
+                                        }
+                                    }
+
+                                    // reverse start positions
+                                    {
+                                        if let Some(position) = &data.positionStart {
+                                            let port_pos = Pos2::new(position.x, position.y);
+                                            let dist = (engine_pos - port_pos).length();
+                                            if dist < 600.0 {
+                                                // do not change the port position, just snap the point to it
+                                                snap_point = Some(port_pos);
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                             }
 
-                            if move_point {
-                                // move the point
+                            // snap the point
+                            if let Some(snap_point) = snap_point {
+                                _point.x = snap_point.x;
+                                _point.y = snap_point.y;
+                            } else {
                                 _point.x = engine_pos.x;
                                 _point.y = engine_pos.y;
                             }
@@ -458,8 +477,13 @@ impl TemplateApp {
                                                 (engine_pos - Pos2::new(point.x, point.y)).length();
                                             if dist < 600.0 {
                                                 // set the point to the new position
-                                                point.x = engine_pos.x;
-                                                point.y = engine_pos.y;
+                                                if let Some(snap_point) = snap_point {
+                                                    point.x = snap_point.x;
+                                                    point.y = snap_point.y;
+                                                } else {
+                                                    point.x = engine_pos.x;
+                                                    point.y = engine_pos.y;
+                                                }
                                             }
                                         }
                                     }
