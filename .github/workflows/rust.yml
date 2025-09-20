@@ -15,15 +15,12 @@ jobs:
       fail-fast: true
       matrix:
         os: [windows-latest]
-        build_type: [release]
+        build_type: [debug]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Build
         run: cargo build --${{ matrix.build_type }}
-
-      - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          path: target/${{ matrix.build_type }}/tes3map.exe
+      - name: Check
+        run: cargo check --all-features

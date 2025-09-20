@@ -2,25 +2,31 @@ on: [workflow_dispatch]
 
 name: Release
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   check:
     name: Check
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
+      fail-fast: true
+      matrix:
+        os: [windows-latest]
+        build_type: [release]
+
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+      - name: Build
+        run: cargo build --${{ matrix.build_type }}
+      - name: Check
+        run: cargo check --all-features
 
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          path: target/release/tes3map.exe
+          path: target/${{ matrix.build_type }}/tes3map.exe
+          if-no-files-found: error
