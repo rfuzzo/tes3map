@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::fs::write;
-use egui::{ahash::HashMap, Context};
+use egui::{ahash::HashMap, emath::RectTransform, Context, Pos2, Response};
 
 use crate::TemplateApp;
 
@@ -458,5 +458,281 @@ impl TemplateApp {
                 }
             });
         });
+    }
+
+    // events
+    pub fn editor_on_point_dragged(&mut self, from_screen: RectTransform, current_pos: Pos2) {
+        // move the selected point if in editor mode
+        if !self.editor_data.enabled {
+            return;
+        }
+
+        if let Some((selected_point, i)) = &self.editor_data.selected_point {
+            // get the segment
+            if let Some(segment) = self.editor_data.segments.get_mut(selected_point) {
+                // get the route
+                if let Some(route1) = &mut segment.route1 {
+                    // get the point
+                    if let Some(_point) = route1.get_mut(*i) {
+                        // translate the point to screen space
+                        let clicked_point = from_screen * current_pos;
+                        let engine_pos = self
+                            .dimensions
+                            .canvas_to_engine(Pos2::new(clicked_point.x, clicked_point.y));
+
+                        // snap to port points but don't change the port
+                        let mut snap_point = None;
+                        for port in self.editor_data.ports.values() {
+                            if snap_point.is_some() {
+                                break;
+                            }
+
+                            for data in port.data.values() {
+                                // start positions
+                                {
+                                    let port_pos = Pos2::new(data.position.x, data.position.y);
+                                    let dist = (engine_pos - port_pos).length();
+                                    if dist < 600.0 {
+                                        // do not change the port position, just snap the point to it
+                                        snap_point = Some(port_pos);
+                                        break;
+                                    }
+                                }
+
+                                // reverse start positions
+                                {
+                                    if let Some(position) = &data.positionStart {
+                                        let port_pos = Pos2::new(position.x, position.y);
+                                        let dist = (engine_pos - port_pos).length();
+                                        if dist < 600.0 {
+                                            // do not change the port position, just snap the point to it
+                                            snap_point = Some(port_pos);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // snap the point
+                        if let Some(snap_point) = snap_point {
+                            _point.x = snap_point.x;
+                            _point.y = snap_point.y;
+                        } else {
+                            _point.x = engine_pos.x;
+                            _point.y = engine_pos.y;
+                        }
+
+                        // check if the point is close to another point in a different segment
+                        // and snap to it
+                        for (id, segment) in self.editor_data.segments.iter_mut() {
+                            // continue if segment is not selected
+                            if !segment.selected {
+                                continue;
+                            }
+
+                            if id != selected_point {
+                                if let Some(route1) = &mut segment.route1 {
+                                    for point in route1.iter_mut() {
+                                        let dist =
+                                            (engine_pos - Pos2::new(point.x, point.y)).length();
+                                        if dist < 600.0 {
+                                            // set the point to the new position
+                                            if let Some(snap_point) = snap_point {
+                                                point.x = snap_point.x;
+                                                point.y = snap_point.y;
+                                            } else {
+                                                point.x = engine_pos.x;
+                                                point.y = engine_pos.y;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn editor_on_ctrl_right_clicked(&mut self, from_screen: RectTransform, interact_pos: Pos2) {
+        if !self.editor_data.enabled {
+            return;
+        }
+
+        let found_point = self.get_point(from_screen, interact_pos, false);
+        if let Some((id, i)) = found_point {
+            // get the segment
+            if let Some(segment) = self.editor_data.segments.get_mut(&id) {
+                // get the route
+                if let Some(route1) = &mut segment.route1 {
+                    // remove the point
+                    route1.remove(i);
+                }
+            }
+        }
+    }
+
+    pub fn editor_on_ctrl_clicked(&mut self, from_screen: RectTransform, interact_pos: Pos2) {
+        if !self.editor_data.enabled {
+            return;
+        }
+
+        // if found, remove the point from the segment
+
+        // add a point to the selected segment
+        if let Some(selected_segment) = &self.editor_data.current_segment {
+            // get the segment
+            if let Some(segment) = self.editor_data.segments.get_mut(selected_segment) {
+                // get the route
+                if let Some(route1) = &mut segment.route1 {
+                    // get point coordinates
+                    let clicked_point = from_screen * interact_pos;
+                    let engine_pos = self.dimensions.canvas_to_engine(clicked_point);
+
+                    // add the point after the nearest point
+                    let mut min_dist = f32::MAX;
+                    let mut min_index = 0;
+                    for (i, point) in route1.iter().enumerate() {
+                        let dist = (engine_pos - Pos2::new(point.x, point.y)).length();
+                        if dist < min_dist {
+                            min_dist = dist;
+                            min_index = i;
+                        }
+                    }
+                    // add the point to the route
+                    if min_index == route1.len() - 1 {
+                        route1.push(Pos3::new(engine_pos.x, engine_pos.y, 0.0));
+                    } else {
+                        route1.insert(min_index, Pos3::new(engine_pos.x, engine_pos.y, 0.0));
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn editor_on_ctrl_drag_started(&mut self, from_screen: RectTransform, interact_pos: Pos2) {
+        // if ctr is pressed and editor mode is enabled
+        if !self.editor_data.enabled {
+            return;
+        }
+
+        let found_point = self.get_point(from_screen, interact_pos, false);
+        if let Some((id, i)) = found_point {
+            self.editor_data.selected_point = Some((id.clone(), i));
+        }
+    }
+
+    pub fn editor_on_click(
+        &mut self,
+        _ui: &mut egui::Ui,
+        from_screen: RectTransform,
+        interact_pos: Pos2,
+    ) -> bool {
+        if !self.editor_data.enabled {
+            return false;
+        }
+
+        let found_point = self.get_point(from_screen, interact_pos, true);
+
+        // if found, remove the point from the segment
+        if let Some((id, _i)) = found_point {
+            // set the current segment
+            self.editor_data.current_segment = Some(id.clone());
+            return true;
+        }
+
+        false
+    }
+
+    pub fn editor_on_hover(
+        &mut self,
+        ui: &mut egui::Ui,
+        response: &Response,
+        from_screen: RectTransform,
+        pointer_pos: Pos2,
+    ) -> bool {
+        if !self.editor_data.enabled {
+            return false;
+        }
+
+        // context menu for editor mode
+        // get point
+        let found_point = self.get_point(from_screen, pointer_pos, true);
+        if let Some((id, i)) = found_point {
+            ui.set_width(200.0);
+
+            if let Some(segment) = self.editor_data.segments.get_mut(&id) {
+                // get the route
+                if let Some(route1) = &mut segment.route1 {
+                    if self.ui_data.show_tooltips && ui.ui_contains_pointer() {
+                        response.clone().on_hover_ui_at_pointer(|ui| {
+                            ui.set_width(200.0);
+
+                            // labels
+                            ui.label(format!("Segment: {}", id));
+                            ui.label(format!("Point: {}", route1[i]));
+
+                            ui.separator();
+
+                            ui.label("Ctrl + Click to remove point".to_string());
+                            ui.label("Ctrl + Drag to move point".to_string());
+                            ui.label("Click to select segment".to_string());
+                            ui.label("Ctrl + Click to add point".to_string());
+                        });
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        false
+    }
+
+    // methods
+
+    fn get_point(
+        &mut self,
+        from_screen: RectTransform,
+        interact_pos: Pos2,
+        ignore_current_segment: bool,
+    ) -> Option<(String, usize)> {
+        // try to get a point from the segments if distace is less than 10 pixels
+        let mut found = false;
+        let mut found_point = None;
+
+        // check if within distance of any point in displayed segments
+        for (id, segment) in self.editor_data.segments.iter().filter(|(_, s)| s.selected) {
+            // check if the segment is selected for editing
+            if !ignore_current_segment {
+                if let Some(selected_segment) = &self.editor_data.current_segment {
+                    if selected_segment != id {
+                        continue;
+                    }
+                }
+            }
+
+            if let Some(route1) = &segment.route1 {
+                for (i, point) in route1.iter().enumerate() {
+                    let clicked_point = from_screen * interact_pos;
+                    let canvas_pos = self
+                        .dimensions
+                        .engine_to_canvas(Pos2::new(point.x, point.y));
+
+                    let dist = (clicked_point - canvas_pos).length();
+                    if dist < 0.1 {
+                        found = true;
+                        found_point = Some((id.clone(), i));
+                        break;
+                    }
+                }
+            }
+            if found {
+                break;
+            }
+        }
+        found_point
     }
 }
