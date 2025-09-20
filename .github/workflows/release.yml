@@ -28,5 +28,5 @@ jobs:
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          path: target/${{ matrix.build_type }}/tes3map.exe
+          path: target/${{ matrix.build_type }}/tes3map${{ matrix.os == 'windows-latest' && '.exe' || '' }}
           if-no-files-found: error
