@@ -132,10 +132,6 @@ impl TemplateApp {
     pub fn editor_panel(&mut self, ui: &mut egui::Ui, _ctx: &Context) {
         ui.heading("Editor");
 
-        // enabled/disabled
-        ui.checkbox(&mut self.editor_data.enabled, "Editor enabled");
-        ui.separator();
-
         // This is an editor panel to draw routes on the map
         // A route consists of a list of segments and an id (startName, destinationName, serviceName)
         // A segment has an id, can have two splines, or a list of segments
